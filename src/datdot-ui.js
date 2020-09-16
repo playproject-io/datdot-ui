@@ -1,95 +1,71 @@
 const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
-
-const datdot_ui_button = require('datdot-ui-button')
+const tab = require('datdot-ui-tab')
 
 module.exports = datdotui
 
 function datdotui (opts) {
 
-  const name = `datdot-ui-${`${Math.random()}`.slice(2)}>`
-  const log = debug(name)
-  var counter = 0
-  var lastmessage
-  const state = {}
+  const { jobs } = opts
+  let state = {}
 
+  const element = bel`
+  <div>
+    ${tab({page: jobs.title, arr: jobs.tab, protocol: protocolTab})}
+    <div class=${css.terminal}></div>
+  </div>
+  `
+  const [tabs, terminal] = element.children
+ 
+  function protocolTab(message) {
+    let { from, flow, type, body, active} = message
+    const log = debug(from)
+    const logger = log.extend('datdot-ui')
+    // logger.log must be put first then logger()
+    logger.log = domlog
+    logger(message)
+  
+    if ( state.tab == undefined ) state.tab = new Array()
 
-  for(var buttons = [], i = opts.buttons || 1; i; i--) {
-    const btn_name = `btn-${i}`
-    const btn_text = i
-    const protocol = send => {
-      const logger = log.extend(btn_name)
-      logger.log = domlog
-      state[btn_name] = { send, logger }
-      return hear
-    }
-    const button = datdot_ui_button({ name: btn_name, text: btn_text, protocol })
-    buttons.push(button)
+    const found = state.tab.some( el => el.body === body)
+    if (!found) state.tab.push( {id: `datdot-ui-${`${Math.random()}`.slice(2)}`, from, flow, type, body, active, logger} )
+
+    state.tab.map( el => { 
+      if ( el.body === body && el.active ) return
+      el.body !== body ? el.active = false : el.active = true 
+    })
+    
+    // check state 
+    const tabChanges = log.extend('ui-tab changes')
+    tabChanges(state.tab)
+    
+    return receive(message)
   }
 
+  function receive(message) {
+    const { from, flow, type, body, active} = message
+    const log = debug(from)
+    const logger = log.extend('receive>')
+    logger(flow, type, body, active)
+  }
 
-  const element = bel`<div class=${css.ui}>
-    <div class=${css.buttons}>${buttons}</div>
-    <div class=${css.terminal}></div>
-  </div>`
-  const [buttonfield, terminal] = element.children
-
+  function domlog(...args) {
+    const {from, flow, type, body} = args[3]
+    const el = bel`<p>${from + " > "}  ${flow}: ${body} ${type}</p>`
+    terminal.append(el)
+  }
 
   return element
-
-
-  function hear (message) {
-    const { flow: [from, id], type, body } = message
-    if (!state[from]) log('unknown sender', bel`<pre>${JSON.stringify(message, 0, 2)}</pre>`)
-    state[from].logger(id, type, body)
-    if (type === 'click') {
-      const text = body
-      if (!lastmessage) return lastmessage = { lastname: from, lasttext: text }
-      const { lastname, lasttext } = lastmessage
-      log('flip buttons:', from, lastname)
-      state[from].send({ flow: [name, counter++], type: 'update', body: { key: 'text', value: lasttext } })
-      state[lastname].send({ flow: [name, counter++], type: 'update', body: { key: 'text', value: text } })      
-      lastmessage = void 0
-    }
-  }
-
-
-  function domlog (...args) {
-    const [_0, _1, _2, id, _3, type, btn2] = args
-    console.log({_0, _1, _2, id, _3, type, btn2})
-    var element = bel`<p>${name} ${type} button ${btn2}</p>`
-    terminal.append(element)
-  }
-
 
 }
 const css = csjs`
 body { 
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
   margin: 0;
   padding: 0;
-  background-color: black;
-  height: 100vh;
-  width: 100vw;
-}
-.ui {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  width: 80vw;
-  background-color: red;
+  background-color: #F2F2F2;
 }
 .terminal {
-  background-color: grey;
-  min-height: 200px;
-  max-height: 200px;
-  overflow-y: scroll;
-  height: auto;
-  color: black;
-  width: 100%;
-}`
+
+}
+`

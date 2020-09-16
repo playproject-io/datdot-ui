@@ -4,7 +4,7 @@
   "description": "example ui components",
   "main": "src/datdot-ui.js",
   "scripts": {
-    "start": "budo demo/index.js:bundle.js --open --live --ssl",
+    "start": "budo demo/index.js:bundle.js --open --live",
     "build": "browserify demo/index.js -o bundle.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
