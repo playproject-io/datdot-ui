@@ -29,6 +29,7 @@
   "dependencies": {
     "bel": "^6.0.0",
     "csjs-inject": "^1.0.1",
+    "date-fns": "^2.16.1",
     "debug": "^4.1.1"
   }
 }
