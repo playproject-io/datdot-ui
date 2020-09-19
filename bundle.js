@@ -20675,11 +20675,17 @@ function datdotui (opts) {
     state.calendar = Object.assign({}, message)
     calenderTitleChanges('state', `${month} ${year}`, state.calendar)
     
-    const updateDays = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays} )
-    const item = document.querySelector(`.${css['calendar-timeline-days']}`)
-    item.innerHTML = ''
-    item.append(updateDays)
-    console.log(updateDays);
+    const updateDays1 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays} )
+    const updateDays2 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays} )
+    const timeline = document.querySelector(`.${css['calendar-timeline-days']}`)
+    const table = document.querySelector(`.${css['calendar-days-wrap']}`)
+    timeline.innerHTML = ''
+    table.innerHTML = ''
+    timeline.append(updateDays1)
+    table.append(updateDays2)
+
+    console.log(updateDays1);
+    console.log(updateDays2);
 
     return receive(message)
   }
