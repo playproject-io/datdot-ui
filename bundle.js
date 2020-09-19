@@ -20597,6 +20597,7 @@ const csjs = require('csjs-inject')
 // widgets
 const tab = require('datdot-ui-tab')
 const calendarHeader = require('datdot-ui-calendar-header')
+const timelineDays = require('datdot-ui-timeline-days')
 
 module.exports = datdotui
 
@@ -20604,6 +20605,9 @@ function datdotui (opts) {
 
   const { jobs, plans } = opts
   let state = {}
+
+  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}`, protocol: protocolTimelineDays } )}</div>`
+  let tableDays = bel`<div class=${css['calendar-days-wrap']}>${timelineDays( {data: null, style: `${css['timeline-days']}`, protocol: protocolTimelineDays } ) }</div>`
 
   const element = bel`
   <div class=${css.wrap}>
@@ -20619,6 +20623,12 @@ function datdotui (opts) {
         <h2 class=${css.title}>Calendar Header</h2>
         <div class=${css["custom-wrap"]}>${calendarHeader({page: jobs.title, protocol: protocolCalendarHeader})}</div>
         <div class=${css["calendar-fullsize"]}>${calendarHeader({page: plans.title, protocol: protocolCalendarHeader})}</div>
+      </div>
+
+      <div class=${css.days}>
+        <h2 class=${css.title}>Days</h2>
+        ${inlineDays}
+        ${tableDays}
       </div>
 
     </section>
@@ -20648,13 +20658,13 @@ function datdotui (opts) {
     })
     
     // check tab
-    tabChanges(body, state.tab)
+    tabChanges('state', state.tab)
     
     return receive(message)
   }
 
   function protocolCalendarHeader(message) {
-    const { from, flow, type, body, count, month, year } = message
+    const { from, flow, type, body, count, month, year, days } = message
     const log = debug(from)
     const logger = log.extend('datdot-ui')
     const calenderTitleChanges = log.extend(`${flow} changes >`)
@@ -20663,10 +20673,22 @@ function datdotui (opts) {
 
     // check calendar
     state.calendar = Object.assign({}, message)
-    // console.log('state calendar', state.calendar)
-    calenderTitleChanges(`${month} ${year}`, state.calendar)
+    calenderTitleChanges('state', `${month} ${year}`, state.calendar)
+    
+    const updateDays = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays} )
+    const item = document.querySelector(`.${css['calendar-timeline-days']}`)
+    item.innerHTML = ''
+    item.append(updateDays)
+    console.log(updateDays);
 
     return receive(message)
+  }
+
+  function protocolTimelineDays(message){
+    const { from, flow, type, body, count, month, year, days} = message
+    const log = debug(from)
+    const logger = log.extend('timeline-days')
+    logger(`${type} day ${body}`, message) 
   }
 
   function receive(message) {
@@ -20743,6 +20765,7 @@ body {
 .custom-wrap {
   background-color: #f2f2f2;
   max-width: 25%;
+  min-width: 225px;
   border-radius: 50px;
 }
 .custom-wrap > [class^="calendar-header"] {
@@ -20753,8 +20776,30 @@ body {
 }
 .calendar-fullsize {
 }
+.days {
+
+}
+.calendar-timeline-days {
+
+}
+.timeline-days {
+  display: grid;
+  grid-template-rows: auto;
+  grid-template-columns: repeat(auto-fit, minmax(30px, auto));
+  justify-content: left;
+  align-items: center;
+}
+.calendar-days-wrap {
+  max-width: 210px;
+}
+.calendar-days {
+  display: grid;
+  grid-template-rows: auto;
+  grid-template-columns: repeat(7, minmax(30px, auto));
+  justify-items: center;
+}
 `
-},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-header":263,"datdot-ui-tab":264,"debug":255}],263:[function(require,module,exports){
+},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-header":263,"datdot-ui-tab":264,"datdot-ui-timeline-days":265,"debug":255}],263:[function(require,module,exports){
 const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
@@ -20856,6 +20901,7 @@ const css = csjs`
     background-color: #C9C9C9;
 }
 .btn:active div > svg path, .btn:hover div > svg path {
+    
 }
 
 .prev {
@@ -20877,7 +20923,7 @@ const css = csjs`
     text-align: center;
 }
 `
-},{"bel":3,"csjs-inject":6,"date-fns":142,"debug":255,"svg":265}],264:[function(require,module,exports){
+},{"bel":3,"csjs-inject":6,"date-fns":142,"debug":255,"svg":266}],264:[function(require,module,exports){
 const bel = require(('bel'))
 const csjs = require('csjs-inject')
 const debug = require('debug')
@@ -20953,6 +20999,77 @@ const css = csjs`
 }
 `
 },{"bel":3,"csjs-inject":6,"debug":255}],265:[function(require,module,exports){
+const debug = require('debug')
+const bel = require('bel')
+const csjs = require('csjs-inject')
+const { format, getDaysInMonth, isToday } = require('date-fns')
+
+module.exports = datdot_ui_calendar_days
+
+function datdot_ui_calendar_days(opts) {
+    const { data, style, protocol } = opts
+    const ui = 'datdot-ui-timeline-days'
+    const date = new Date()
+    
+    const obj = {
+        count: parseInt( format(date, 'M') ),
+        month: format(date, 'MMMM'),
+        year: parseInt( format(date, 'yyyy') ),
+    }
+
+    if ( data === null ) {
+        var count = count = parseInt( format(date, 'M') )
+        var month = format(date, 'MMMM')
+        var year = parseInt( format(date, 'yyyy') )
+        var days = getDaysInMonth(year, count) 
+        console.log('no data', count, month, year, days );
+
+    } else {
+        console.log('data', data)
+        var { from, flow, count, month, year, days } = data
+    }
+
+
+    const today = (d) => isToday(new Date(year, count-1, d) ) 
+    const el = bel`<section class=${style}></section>`
+    const log = debug(ui)
+
+    for (let day = 1; day <= days; day++ ) {
+        let numbers = bel`<div class="${css['timeline-day']} ${today(day) ? css.today : ''}" data-day="${day}" onclick=${() => getDay(numbers)}>${day}</div>`
+        el.append(numbers)
+    }
+    
+    return el
+
+    function getDay(el) {
+        const value = parseInt(el.dataset.day)
+        const message = { from: from ? from : ui, flow: flow ? flow : ui, type: 'click', body: value, count, month, year, days }
+        const logger = log.extend(`day> ${message.body}`)
+
+        el.classList.add(css.current)
+
+        logger('send', message)
+
+        return protocol(message)
+    }
+}
+
+const css = csjs`
+.timeline-day {
+    text-align: center;
+    padding: 8px;
+    cursor: pointer;
+}
+.today {
+    color: #fff;
+    background-color: #000;
+}
+.current {
+    color: #fff;
+    background-color: blue;
+}
+`
+},{"bel":3,"csjs-inject":6,"date-fns":142,"debug":255}],266:[function(require,module,exports){
 module.exports = svg
 
 function svg(opts) {

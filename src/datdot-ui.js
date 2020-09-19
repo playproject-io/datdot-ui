@@ -4,6 +4,7 @@ const csjs = require('csjs-inject')
 // widgets
 const tab = require('datdot-ui-tab')
 const calendarHeader = require('datdot-ui-calendar-header')
+const timelineDays = require('datdot-ui-timeline-days')
 
 module.exports = datdotui
 
@@ -11,6 +12,9 @@ function datdotui (opts) {
 
   const { jobs, plans } = opts
   let state = {}
+
+  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}`, protocol: protocolTimelineDays } )}</div>`
+  let tableDays = bel`<div class=${css['calendar-days-wrap']}>${timelineDays( {data: null, style: `${css['timeline-days']}`, protocol: protocolTimelineDays } ) }</div>`
 
   const element = bel`
   <div class=${css.wrap}>
@@ -26,6 +30,12 @@ function datdotui (opts) {
         <h2 class=${css.title}>Calendar Header</h2>
         <div class=${css["custom-wrap"]}>${calendarHeader({page: jobs.title, protocol: protocolCalendarHeader})}</div>
         <div class=${css["calendar-fullsize"]}>${calendarHeader({page: plans.title, protocol: protocolCalendarHeader})}</div>
+      </div>
+
+      <div class=${css.days}>
+        <h2 class=${css.title}>Days</h2>
+        ${inlineDays}
+        ${tableDays}
       </div>
 
     </section>
@@ -55,13 +65,13 @@ function datdotui (opts) {
     })
     
     // check tab
-    tabChanges(body, state.tab)
+    tabChanges('state', state.tab)
     
     return receive(message)
   }
 
   function protocolCalendarHeader(message) {
-    const { from, flow, type, body, count, month, year } = message
+    const { from, flow, type, body, count, month, year, days } = message
     const log = debug(from)
     const logger = log.extend('datdot-ui')
     const calenderTitleChanges = log.extend(`${flow} changes >`)
@@ -70,10 +80,22 @@ function datdotui (opts) {
 
     // check calendar
     state.calendar = Object.assign({}, message)
-    // console.log('state calendar', state.calendar)
-    calenderTitleChanges(`${month} ${year}`, state.calendar)
+    calenderTitleChanges('state', `${month} ${year}`, state.calendar)
+    
+    const updateDays = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays} )
+    const item = document.querySelector(`.${css['calendar-timeline-days']}`)
+    item.innerHTML = ''
+    item.append(updateDays)
+    console.log(updateDays);
 
     return receive(message)
+  }
+
+  function protocolTimelineDays(message){
+    const { from, flow, type, body, count, month, year, days} = message
+    const log = debug(from)
+    const logger = log.extend('timeline-days')
+    logger(`${type} day ${body}`, message) 
   }
 
   function receive(message) {
@@ -150,6 +172,7 @@ body {
 .custom-wrap {
   background-color: #f2f2f2;
   max-width: 25%;
+  min-width: 225px;
   border-radius: 50px;
 }
 .custom-wrap > [class^="calendar-header"] {
@@ -159,5 +182,27 @@ body {
   font-size: 16px;
 }
 .calendar-fullsize {
+}
+.days {
+
+}
+.calendar-timeline-days {
+
+}
+.timeline-days {
+  display: grid;
+  grid-template-rows: auto;
+  grid-template-columns: repeat(auto-fit, minmax(30px, auto));
+  justify-content: left;
+  align-items: center;
+}
+.calendar-days-wrap {
+  max-width: 210px;
+}
+.calendar-days {
+  display: grid;
+  grid-template-rows: auto;
+  grid-template-columns: repeat(7, minmax(30px, auto));
+  justify-items: center;
 }
 `
