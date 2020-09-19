@@ -20754,6 +20754,7 @@ body {
 }
 .ui-widgets {
   padding: 20px;
+  overflow-y: auto;
 }
 .ui-widgets > div {
   margin-bottom: 30px;
