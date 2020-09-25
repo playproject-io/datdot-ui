@@ -20596,7 +20596,7 @@ const bel = require('bel')
 const csjs = require('csjs-inject')
 // widgets
 const tab = require('datdot-ui-tab')
-const calendarHeader = require('datdot-ui-calendar-header')
+const calendarHeader = require('datdot-ui-calendar-month')
 const timelineDays = require('datdot-ui-timeline-days')
 
 module.exports = datdotui
@@ -20606,8 +20606,8 @@ function datdotui (opts) {
   const { jobs, plans } = opts
   let state = {}
 
-  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}`, protocol: protocolTimelineDays } )}</div>`
-  let tableDays = bel`<div class=${css['calendar-days-wrap']}>${timelineDays( {data: null, style: `${css['timeline-days']}`, protocol: protocolTimelineDays } ) }</div>`
+  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, protocolTimelineDays )}</div>`
+  let tableDays = bel`<div class=${css['calendar-days-wrap']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, protocolTimelineDays ) }</div>`
 
   const element = bel`
   <div class=${css.wrap}>
@@ -20615,14 +20615,14 @@ function datdotui (opts) {
 
       <div class=${css.tab}>
         <h2 class=${css.title}>Tab</h2>
-        ${tab({page: jobs.title, arr: jobs.tab, protocol: protocolTab})}
-        ${tab({page: plans.title, arr: plans.tab, protocol: protocolTab})}
+        ${tab({page: jobs.title, arr: jobs.tab}, protocolTab)}
+        ${tab({page: plans.title, arr: plans.tab}, protocolTab)}
       </div>
 
       <div class=${css.calendar}>
         <h2 class=${css.title}>Calendar Header</h2>
-        <div class=${css["custom-wrap"]}>${calendarHeader({page: jobs.title, protocol: protocolCalendarHeader})}</div>
-        <div class=${css["calendar-fullsize"]}>${calendarHeader({page: plans.title, protocol: protocolCalendarHeader})}</div>
+        <div class=${css["custom-wrap"]}>${calendarHeader({page: jobs.title}, protocolCalendarHeader)}</div>
+        <div class=${css["calendar-fullsize"]}>${calendarHeader({page: plans.title}, protocolCalendarHeader)}</div>
       </div>
 
       <div class=${css.days}>
@@ -20646,19 +20646,35 @@ function datdotui (opts) {
     // logger.log must be put first then logger()
     logger.log = domlog
     logger(message)
-  
-    if ( state.tab == undefined ) state.tab = new Array()
 
-    const found = state.tab.some( el => el.body === body)
-    if (!found) state.tab.push( {id: `datdot-ui-${`${Math.random()}`.slice(2)}`, from, flow, type, body, active, logger} )
 
-    state.tab.map( el => { 
-      if ( el.body === body && el.active ) return
-      el.body !== body ? el.active = false : el.active = true 
-    })
+    if ( state.tabs == undefined ) state.tabs = new Array()
+    const foundFrom = state.tabs.some( obj => obj.from === from )
+    const foundData = state.tabs.some( obj => obj.from === from && obj.data.some( d => d.body === body ) )
+    const filterFrom = state.tabs.filter( obj => obj.from === from )
+
+    // check from if not existed then store new tab
+    if ( !foundFrom ) {
+      state.tabs.push( { from, data: [ {from, flow, type, body, active, logger} ] })
+      return tabChanges('state', state.tabs)
+    }
+
+    // check from and data existed then only change current tab status
+    if ( foundData ) {
+      filterFrom.map( o => o.data.map( d => d.active = d.body === body) )
+      return tabChanges('state', state.tabs)
+    }
+
+    // when data is not existed then add to data
+    filterFrom.map( o => o.data.push({from, flow, type, body, active, logger}) ) 
+    
+    // check from existed then store current tab status
+    if ( foundFrom ) {
+      filterFrom.map( o => o.data.map( d => d.active = d.body === body ))
+    }
     
     // check tab
-    tabChanges('state', state.tab)
+    tabChanges('state', state.tabs)
     
     return receive(message)
   }
@@ -20675,21 +20691,22 @@ function datdotui (opts) {
     state.calendar = Object.assign({}, message)
     calenderTitleChanges('state', `${month} ${year}`, state.calendar)
     
-    const updateDays1 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays} )
-    const updateDays2 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays} )
+    const updateDays1 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays}, onclick )
+    const updateDays2 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays}, onclick )
     const timeline = document.querySelector(`.${css['calendar-timeline-days']}`)
     const table = document.querySelector(`.${css['calendar-days-wrap']}`)
     timeline.innerHTML = ''
     table.innerHTML = ''
     timeline.append(updateDays1)
     table.append(updateDays2)
-
-    console.log(updateDays1);
-    console.log(updateDays2);
-
+    
     return receive(message)
   }
 
+  function onclick(message){
+    console.log('protocol onclick', message)
+  }
+  
   function protocolTimelineDays(message){
     const { from, flow, type, body, count, month, year, days} = message
     const log = debug(from)
@@ -20806,24 +20823,23 @@ body {
   justify-items: center;
 }
 `
-},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-header":263,"datdot-ui-tab":264,"datdot-ui-timeline-days":265,"debug":255}],263:[function(require,module,exports){
+},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-month":263,"datdot-ui-tab":264,"datdot-ui-timeline-days":265,"debug":255}],263:[function(require,module,exports){
 const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
-const { format, getDaysInMonth } = require('date-fns')
+const { format, getMonth, getYear, getDaysInMonth, setMonth } = require('date-fns')
 const svg = require('svg')
-module.exports = datdot_ui_calendar_header
+module.exports = datdot_ui_calendar_month
 
-function datdot_ui_calendar_header(opts) {
-    const { page, getDate, protocol } = opts
-    const ui = 'ui-calendar-header'
+function datdot_ui_calendar_month({page, getDate}, protocol) {
+    const ui = 'ui-calendar-month'
     const log = debug(page)
     const logger = log.extend(`${ui} >`)
     const date = getDate || new Date()
-    let year = parseInt( format(date, 'yyyy') )
-    let current = parseInt( format( date, 'M') )
+    let year = getYear( date )
+    let current = getMonth( date )
     // get Capital month
-    let month = format( date, 'MMMM')
+    let month = format( new Date(year, current), 'MMMM')
     let message, days
 
     // elements
@@ -20833,34 +20849,35 @@ function datdot_ui_calendar_header(opts) {
 
     const element = bel`
     <div class=${css["calendar-header"]}>
-        <button class="${css.btn} ${css.prev}" onclick=${ () => prevTrigger()}>${prev}</button>
+        <button role="button" aria-label="Previous month" class="${css.btn} ${css.prev}" onclick=${ () => prevTrigger()}>${prev}</button>
         ${title}
-        <button class="${css.btn} ${css.next}" onclick=${ () => nextTrigger()}>${next}</button>
+        <button role="button" aria-label="Next month" class="${css.btn} ${css.next}" onclick=${ () => nextTrigger()}>${next}</button>
     </div>
     `
 
     return element
 
-    function updateMonth(m) {
-        month = format(new Date(year, m - 1), 'MMMM')
-        return title.innerHTML = `${month} ${year}`
+    function updateMonth(m, y) {
+        return title.innerHTML = `${m} ${y}`
     }
 
     function prevTrigger() {
         // decrement year
-        if (current <= 1) {
-            current = 12
-            year -= 1
-        } else {
-            current -= 1
-        }
+        let previMonth = setMonth(date, current - 1 )
+        current -= 1
+        
+        let m = getMonth( previMonth )
+        console.log('m', m);
+        let y = getYear( previMonth )
+        let month = format( new Date(year, m), 'MMMM')
+        let days = getDaysInMonth(previMonth)
+        // console.log(m + 1, y,  `${days} days`);
+        updateMonth(month, y)
 
-        updateMonth(current)
-        days = getDaysInMonth( new Date(year, current-1) )
-        logger('prev update', current, `${month} ${year}, ${days} days`)
+        logger('prev month', m, `${month} ${y}, ${days} days`)
 
         // send message to parent component
-        message = { from: page, flow: ui, type: 'click', body: 'prev month', count: current, month, year, days}
+        message = { from: page, flow: ui, type: 'click', body: 'prev month', count: m, month, year: y, days}
         logger(message.body, 'send', message)
 
         return protocol(message)
@@ -20868,19 +20885,19 @@ function datdot_ui_calendar_header(opts) {
     
     function nextTrigger() {
         // increment month
-        if (current >= 12) {
-            current = 1
-            year += 1
-        } else {
-            current += 1
-        }
-        
-        updateMonth(current)
-        days = getDaysInMonth( new Date(year, current-1) )
-        logger('next update', current, `${month} ${year}, ${days} days`)
+        let nextMonth = setMonth( new Date(), current + 1 )
+        current += 1
+
+        let m = nextMonth.getMonth()
+        let y = nextMonth.getFullYear()
+        let month = format( new Date(y, m), 'MMMM')
+        let days = getDaysInMonth(nextMonth)
+        // console.log(m + 1, y, `${days} days`);
+        updateMonth(month, y)
+        logger('next update', m, `${month} ${y}, ${days} days`)
         
         // send message to parent component
-        message = { from: page, flow: ui, type: 'click', body: 'next month', count: current, month, year, days}
+        message = { from: page, flow: ui, type: 'click', body: 'next month', count: m, month, year: y, days}
         logger(message.body, 'send', message)
 
         return protocol(message)
@@ -20937,17 +20954,16 @@ const debug = require('debug')
 
 module.exports = datdot_ui_tab
 
-function datdot_ui_tab(opts) {
-    const { page, arr, protocol } = opts
+function datdot_ui_tab({page, arr}, protocol) {
     const ui = 'ui-tab'
     const log = debug(page)
     const element = bel`
     <nav class=${css.tab}>
         ${arr.map( (name, index) => {
                 if (index === 0) {
-                    return bel`<button class="${css.btn} ${css.current}" onclick=${ (e) => onTrigger(e, name) }>${name}</button>`
+                    return bel`<button role="button" aria-label="${name}" aria-tab-active="true" class="${css.btn} ${css.current}" onclick=${ (e) => onTrigger(e, name) }>${name}</button>`
                 } else {
-                    return bel`<button class=${css.btn} onclick=${ (e) => onTrigger(e, name) }>${name}</button>`
+                    return bel`<button role="button" aria-label="${name}" aria-tab-active="false" class=${css.btn} onclick=${ (e) => onTrigger(e, name) }>${name}</button>`
                 }
             })
         }
@@ -20967,11 +20983,13 @@ function datdot_ui_tab(opts) {
             // message.active = true
 
         childrens.forEach( btn => {
+            btn.setAttribute('aria-tab-active', false)
             btn.classList.remove(css.current)
             message.active = false
         })
 
         if ( el.innerText === name ) {
+            el.setAttribute('aria-tab-active', true)
             el.classList.add(css.current)
             message.active = true
         }
@@ -21009,52 +21027,65 @@ const css = csjs`
 const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
-const { format, getDaysInMonth, isToday } = require('date-fns')
+const { format, getDate, getMonth, getYear, getDaysInMonth, isToday } = require('date-fns')
 
-module.exports = datdot_ui_calendar_days
+module.exports = datdot_ui_timeline_days
 
-function datdot_ui_calendar_days(opts) {
-    const { data, style, protocol } = opts
+function datdot_ui_timeline_days({data = null, style}, protocol) {
     const ui = 'datdot-ui-timeline-days'
     const date = new Date()
-    
-    const obj = {
-        count: parseInt( format(date, 'M') ),
-        month: format(date, 'MMMM'),
-        year: parseInt( format(date, 'yyyy') ),
-    }
+    const today = getDate(date)
 
     if ( data === null ) {
-        var count = count = parseInt( format(date, 'M') )
-        var month = format(date, 'MMMM')
-        var year = parseInt( format(date, 'yyyy') )
-        var days = getDaysInMonth(year, count) 
-        console.log('no data', count, month, year, days );
-
+        // if no data
+        var count = getMonth(date) // initial month
+        var month = format(date, 'MMMM') // get capitalization month
+        var year = getYear(date) // initial year
+        var days = getDaysInMonth(date) // initial days
     } else {
-        console.log('data', data)
-        var { from, flow, count, month, year, days } = data
+        // if data is loaded
+        var { from, count, month, year, days } = data
     }
 
+    const is_today = (d) => isToday(new Date(year, count, d)) 
 
-    const today = (d) => isToday(new Date(year, count-1, d) ) 
+    
     const el = bel`<section class=${style}></section>`
     const log = debug(ui)
 
-    for (let day = 1; day <= days; day++ ) {
-        let numbers = bel`<div class="${css['timeline-day']} ${today(day) ? css.today : ''}" data-day="${day}" onclick=${() => getDay(numbers)}>${day}</div>`
-        el.append(numbers)
+    for (let d = 1; d <= days; d++ ) {
+        let date = format(new Date(year, count, d), 'EEEE MMMM d, yyyy')
+        let setDate = format(new Date(year, count, d), 'yyyy-M-d')
+        
+        if (d < today && count <= new Date().getMonth() && year <= new Date().getFullYear() ) {
+            var day = bel`<div role="button" class="${css['timeline-day']} ${css['disabled-date']}" aria-today=${is_today(d)} aria-label="${date}" data-date="${setDate}">${d}</div>`
+        } else if ( count < new Date().getMonth() && year <= new Date().getFullYear() ) {
+            var day = bel`<div role="button" class="${css['timeline-day']} ${css['disabled-date']}" aria-today=${is_today(d)} aria-label="${date}" data-date="${setDate}">${d}</div>`
+        } else if ( year < new Date().getFullYear()) {
+            var day = bel`<div role="button" class="${css['timeline-day']} ${css['disabled-date']}" aria-today=${is_today(d)} aria-label="${date}" data-date="${setDate}">${d}</div>`
+        }
+         else {
+            var day = bel`<div role="button" class="${css['timeline-day']} ${is_today(d) ? css.today : ''}" aria-today=${is_today(d)} aria-label="${date}" data-date="${setDate}" onclick=${(el) => onclick( el.target, setDate )}>${d}</div>`
+        }
+        el.append(day)
     }
     
     return el
 
-    function getDay(el) {
-        const value = parseInt(el.dataset.day)
-        const message = { from: from ? from : ui, flow: flow ? flow : ui, type: 'click', body: value, count, month, year, days }
+    function onclick(target, date) {
+        const message = { from: from ? from : ui, flow: ui, type: 'click', body: date, count, month, year, days }
         const logger = log.extend(`day> ${message.body}`)
 
-        el.classList.add(css.current)
+        const children = [...el.children]
+        children.forEach( btn => {
+            btn.classList.remove(css['date-selected'])
+            btn.removeAttribute('aira-selected')
+        })
 
+        target.classList.add(css['date-selected'])
+        target.setAttribute('aria-selected', true)
+
+        logger('date selected', date);
         logger('send', message)
 
         return protocol(message)
@@ -21071,9 +21102,13 @@ const css = csjs`
     color: #fff;
     background-color: #000;
 }
-.current {
+.date-selected {
     color: #fff;
     background-color: blue;
+}
+.disabled-date {
+    color: #BBBBBB;
+    cursor: default;
 }
 `
 },{"bel":3,"csjs-inject":6,"date-fns":142,"debug":255}],266:[function(require,module,exports){

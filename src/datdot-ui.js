@@ -3,7 +3,7 @@ const bel = require('bel')
 const csjs = require('csjs-inject')
 // widgets
 const tab = require('datdot-ui-tab')
-const calendarHeader = require('datdot-ui-calendar-header')
+const calendarHeader = require('datdot-ui-calendar-month')
 const timelineDays = require('datdot-ui-timeline-days')
 
 module.exports = datdotui
@@ -13,8 +13,8 @@ function datdotui (opts) {
   const { jobs, plans } = opts
   let state = {}
 
-  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}`, protocol: protocolTimelineDays } )}</div>`
-  let tableDays = bel`<div class=${css['calendar-days-wrap']}>${timelineDays( {data: null, style: `${css['timeline-days']}`, protocol: protocolTimelineDays } ) }</div>`
+  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, protocolTimelineDays )}</div>`
+  let tableDays = bel`<div class=${css['calendar-days-wrap']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, protocolTimelineDays ) }</div>`
 
   const element = bel`
   <div class=${css.wrap}>
@@ -22,14 +22,14 @@ function datdotui (opts) {
 
       <div class=${css.tab}>
         <h2 class=${css.title}>Tab</h2>
-        ${tab({page: jobs.title, arr: jobs.tab, protocol: protocolTab})}
-        ${tab({page: plans.title, arr: plans.tab, protocol: protocolTab})}
+        ${tab({page: jobs.title, arr: jobs.tab}, protocolTab)}
+        ${tab({page: plans.title, arr: plans.tab}, protocolTab)}
       </div>
 
       <div class=${css.calendar}>
         <h2 class=${css.title}>Calendar Header</h2>
-        <div class=${css["custom-wrap"]}>${calendarHeader({page: jobs.title, protocol: protocolCalendarHeader})}</div>
-        <div class=${css["calendar-fullsize"]}>${calendarHeader({page: plans.title, protocol: protocolCalendarHeader})}</div>
+        <div class=${css["custom-wrap"]}>${calendarHeader({page: jobs.title}, protocolCalendarHeader)}</div>
+        <div class=${css["calendar-fullsize"]}>${calendarHeader({page: plans.title}, protocolCalendarHeader)}</div>
       </div>
 
       <div class=${css.days}>
@@ -53,19 +53,35 @@ function datdotui (opts) {
     // logger.log must be put first then logger()
     logger.log = domlog
     logger(message)
-  
-    if ( state.tab == undefined ) state.tab = new Array()
 
-    const found = state.tab.some( el => el.body === body)
-    if (!found) state.tab.push( {id: `datdot-ui-${`${Math.random()}`.slice(2)}`, from, flow, type, body, active, logger} )
 
-    state.tab.map( el => { 
-      if ( el.body === body && el.active ) return
-      el.body !== body ? el.active = false : el.active = true 
-    })
+    if ( state.tabs == undefined ) state.tabs = new Array()
+    const foundFrom = state.tabs.some( obj => obj.from === from )
+    const foundData = state.tabs.some( obj => obj.from === from && obj.data.some( d => d.body === body ) )
+    const filterFrom = state.tabs.filter( obj => obj.from === from )
+
+    // check from if not existed then store new tab
+    if ( !foundFrom ) {
+      state.tabs.push( { from, data: [ {from, flow, type, body, active, logger} ] })
+      return tabChanges('state', state.tabs)
+    }
+
+    // check from and data existed then only change current tab status
+    if ( foundData ) {
+      filterFrom.map( o => o.data.map( d => d.active = d.body === body) )
+      return tabChanges('state', state.tabs)
+    }
+
+    // when data is not existed then add to data
+    filterFrom.map( o => o.data.push({from, flow, type, body, active, logger}) ) 
+    
+    // check from existed then store current tab status
+    if ( foundFrom ) {
+      filterFrom.map( o => o.data.map( d => d.active = d.body === body ))
+    }
     
     // check tab
-    tabChanges('state', state.tab)
+    tabChanges('state', state.tabs)
     
     return receive(message)
   }
@@ -82,21 +98,22 @@ function datdotui (opts) {
     state.calendar = Object.assign({}, message)
     calenderTitleChanges('state', `${month} ${year}`, state.calendar)
     
-    const updateDays1 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays} )
-    const updateDays2 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays} )
+    const updateDays1 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays}, onclick )
+    const updateDays2 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays}, onclick )
     const timeline = document.querySelector(`.${css['calendar-timeline-days']}`)
     const table = document.querySelector(`.${css['calendar-days-wrap']}`)
     timeline.innerHTML = ''
     table.innerHTML = ''
     timeline.append(updateDays1)
     table.append(updateDays2)
-
-    console.log(updateDays1);
-    console.log(updateDays2);
-
+    
     return receive(message)
   }
 
+  function onclick(message){
+    console.log('protocol onclick', message)
+  }
+  
   function protocolTimelineDays(message){
     const { from, flow, type, body, count, month, year, days} = message
     const log = debug(from)
