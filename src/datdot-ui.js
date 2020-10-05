@@ -3,39 +3,56 @@ const bel = require('bel')
 const csjs = require('csjs-inject')
 // widgets
 const tab = require('datdot-ui-tab')
-const calendarHeader = require('datdot-ui-calendar-month')
+const calendarMonth = require('datdot-ui-calendar-month')
 const timelineDays = require('datdot-ui-timeline-days')
+const calendarDays = require('datdot-ui-calendar-days')
+const datepicker = require('datdot-ui-datepicker')
 
 module.exports = datdotui
 
 function datdotui (opts) {
-
   const { jobs, plans } = opts
   let state = {}
+  let date = new Date()
 
-  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, protocolTimelineDays )}</div>`
-  let tableDays = bel`<div class=${css['calendar-days-wrap']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, protocolTimelineDays ) }</div>`
+  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )}</div>`
+  let tableDays = bel`<div class=${css['calendar-table-days']}>${calendarDays( {data: null, style: `${css['calendar-days']}` }, calendarDaysProtocol ) }</div>`
+  const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
+  const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+  weekList.map( w => {
+      const div = bel`<div class=${css['calendar-week']} role="week">${w.slice(0 ,1)}</div>`
+      weekday.append(div)
+  })
+
 
   const element = bel`
   <div class=${css.wrap}>
     <section class=${css["ui-widgets"]}>
 
-      <div class=${css.tab}>
+      <div class=${css['ui-tab']}>
         <h2 class=${css.title}>Tab</h2>
-        ${tab({page: jobs.title, arr: jobs.tab}, protocolTab)}
-        ${tab({page: plans.title, arr: plans.tab}, protocolTab)}
+        ${tab({page: jobs.title, arr: jobs.tab}, tabProtocol)}
+        ${tab({page: plans.title, arr: plans.tab}, tabProtocol)}
       </div>
 
-      <div class=${css.calendar}>
+      <div class=${css['ui-calendar-header']}>
         <h2 class=${css.title}>Calendar Header</h2>
-        <div class=${css["custom-wrap"]}>${calendarHeader({page: jobs.title}, protocolCalendarHeader)}</div>
-        <div class=${css["calendar-fullsize"]}>${calendarHeader({page: plans.title}, protocolCalendarHeader)}</div>
+        <div class=${css["custom-header"]}>${calendarMonth({page: jobs.title}, calendarMonthProtocol)}</div>
+        <div class=${css["calendar-header-fullsize"]}>${calendarMonth({page: plans.title}, calendarMonthProtocol)}</div>
       </div>
 
       <div class=${css.days}>
         <h2 class=${css.title}>Days</h2>
         ${inlineDays}
-        ${tableDays}
+        <div class=${css['calendar-section']}>
+          ${weekday}
+          ${tableDays}
+        </div>
+      </div>
+
+      <div class=${css['ui-datepicker']}>
+        <h2 class=${css.title}>Date Picker</h2>
+        ${datepicker(datepickerProtocol)}
       </div>
 
     </section>
@@ -45,7 +62,7 @@ function datdotui (opts) {
   `
   const [section, terminal] = element.children
  
-  function protocolTab(message) {
+  function tabProtocol(message) {
     const { from, flow, type, body, active} = message
     const log = debug(from)
     const logger = log.extend('datdot-ui')
@@ -86,7 +103,16 @@ function datdotui (opts) {
     return receive(message)
   }
 
-  function protocolCalendarHeader(message) {
+  function datepickerProtocol(message) {
+    console.log('message', message)
+    const { from, flow, type, body, count, month, year, days } = message
+    const log = debug(from)
+    const logger = log.extend('datepicker')
+    logger.log = domlog
+    return receive(message)
+  }
+
+  function calendarMonthProtocol(message) {
     const { from, flow, type, body, count, month, year, days } = message
     const log = debug(from)
     const logger = log.extend('datdot-ui')
@@ -98,27 +124,36 @@ function datdotui (opts) {
     state.calendar = Object.assign({}, message)
     calenderTitleChanges('state', `${month} ${year}`, state.calendar)
     
-    const updateDays1 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays}, onclick )
-    const updateDays2 = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`, protocol: protocolTimelineDays}, onclick )
+    const typeTimeline = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`}, timelineDaysProtocol )
+    // type: 'multiple picker', '
+    const typeTable = calendarDays( {data: state.calendar, type: 'multiple-date-picker', style: `${css['calendar-days']}`}, calendarDaysProtocol )
     const timeline = document.querySelector(`.${css['calendar-timeline-days']}`)
-    const table = document.querySelector(`.${css['calendar-days-wrap']}`)
+    const table = document.querySelector(`.${css['calendar-table-days']}`)
     timeline.innerHTML = ''
     table.innerHTML = ''
-    timeline.append(updateDays1)
-    table.append(updateDays2)
+    timeline.append(typeTimeline)
+    table.append(typeTable)
     
     return receive(message)
   }
-
-  function onclick(message){
-    console.log('protocol onclick', message)
-  }
   
-  function protocolTimelineDays(message){
+  function calendarDaysProtocol(message){
+    const { from, flow, type, body, count, month, year, days} = message
+    const log = debug(from)
+    const logger = log.extend('calendar-days')
+    logger.log = domlog
+    logger(`${type} day ${body}`, message) 
+
+    return receive(message)
+  }
+
+  function timelineDaysProtocol(message){
     const { from, flow, type, body, count, month, year, days} = message
     const log = debug(from)
     const logger = log.extend('timeline-days')
+    logger.log = domlog
     logger(`${type} day ${body}`, message) 
+    return receive(message)
   }
 
   function receive(message) {
@@ -139,9 +174,12 @@ function datdotui (opts) {
   }
 
   function domlog(...args) {
-    // console.log(args[3]);
-    const {from, flow, type, body} = args[3]
-    const el = bel`<div>${from + " > "}  ${flow}: ${body} ${type}</div>`
+    for (let obj of args) {
+      if (typeof obj === 'object' && obj.hasOwnProperty('month')) var {from, flow, type, body, month, year, days} = obj
+      if (typeof obj === 'object' && obj.hasOwnProperty('calendar-days')) var {from, flow, type, body, month, year, days} = obj
+      if (typeof obj === 'object' && obj.flow === 'ui-tab') var {from, flow, type, body} = obj
+    }
+    const el = bel`<div>${from + " > "}  ${flow}: ${body} ${type} ${month && month} ${year && year}${days ? `, ${days} days` : null }</div>`
     terminal.insertBefore(el, terminal.firstChild)
   }
 
@@ -155,6 +193,9 @@ body {
   font-family: Arial, Helvetica, sans-serif;
   background-color: #F2F2F2;
   height: 100%;
+}
+button:active, button:focus {
+  outline: dotted 1px #c9c9c9;
 }
 .wrap {
   display: grid;
@@ -185,27 +226,30 @@ body {
   padding: 10px 20px 20px 20px;
   background-color: #fff;
 }
-.tab > nav {
+.ui-tab {
+
+}
+.ui-tab > nav {
   margin-bottom: 20px;
 }
 .title {
-  color: #4BAFFF;
+  color: #008dff;
 }
-.calendar {
+.ui-calendar-header {
 }
-.custom-wrap {
+.custom-header {
   background-color: #f2f2f2;
   max-width: 25%;
   min-width: 225px;
   border-radius: 50px;
 }
-.custom-wrap > [class^="calendar-header"] {
+.custom-header > [class^="calendar-header"] {
   grid-template-rows: 30px;
 }
-.custom-wrap > [class^="calendar-header"] h3 {
+.custom-header > [class^="calendar-header"] h3 {
   font-size: 16px;
 }
-.calendar-fullsize {
+.calendar-header-fullsize {
 }
 .days {
 
@@ -220,7 +264,11 @@ body {
   justify-content: left;
   align-items: center;
 }
-.calendar-days-wrap {
+.calendar-section {
+  margin-top: 30px;
+  font-size: 12px;
+}
+.calendar-table-days {
   max-width: 210px;
 }
 .calendar-days {
@@ -228,5 +276,16 @@ body {
   grid-template-rows: auto;
   grid-template-columns: repeat(7, minmax(30px, auto));
   justify-items: center;
+}
+.calendar-weekday {
+  display: grid;
+  grid-template-rows: auto;
+  grid-template-columns: repeat(7, 30px);
+  justify-items: center;
+}
+.calendar-week {
+}
+.ui-datepicker {
+
 }
 `
