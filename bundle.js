@@ -20903,7 +20903,6 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
         send( {from: name, type: 'init' } )
     }
 
-
     let start, end
     if ( data === null ) {
         // if no data
@@ -20935,8 +20934,9 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
     return el
 
     function receive( message ) {
+        log(`${name} received`, message )
         const { type, body } = message
-        if ( status === 'start-select-by-other') return console.log( message )
+        if ( status === 'start-select-by-other') return 
     }
 
 
@@ -21449,6 +21449,8 @@ function datepicker(protocol) {
     }
 
     function selectRangeDaysProtocol(message, send) {
+        const { from, type, body } = message
+        const logger = log.extend('calendar')
         // const { from, type, body, day, count, year } = message
         // console.log(ui, 'receive', `${from} type: ${type}` );
 
@@ -21472,7 +21474,7 @@ function datepicker(protocol) {
         //     // console.log('start', startDate.date, 'to', endDate)
         // }
       
-        const { type, body } = message
+        if (type === 'init') return logger(`${from} is ready`)
         if (type === 'value/start') return notifyAndStoreFirst( message )
         if (type === 'value/end') return notifyAndStoreLast(message)
         if (type === 'selecting-second') return notifyOther(message, send)
@@ -21481,11 +21483,12 @@ function datepicker(protocol) {
 
     function notifyOther(message, send) {
         const { sender, status, type, body, day, count, year } = message
-        console.log(message);
         datepicker.status = status
         datepicker.type = type
         daterangepicker.setItem('datepicker', JSON.stringify(datepicker))
-        console.log('daterangepicker', JSON.parse( daterangepicker.getItem('datepicker') ) )
+        log('notifyOther received', message)
+        log('daterangepicker', JSON.parse( daterangepicker.getItem('datepicker') ) )
+        send( message )
     }
 
     function notifyAndStoreLast (message) {
@@ -21517,8 +21520,8 @@ function datepicker(protocol) {
         datepicker.startDate = { from: start.sender, date: start.date }
         datepicker.endDate = end === void 0 ? null : { from: end.sender, date: end.date }
         daterangepicker.setItem('datepicker', JSON.stringify(datepicker))
-        console.log( startDate ); // {sender: "October 2020", year: 2020, count: 9, day: "20", date: "2020-10-20"}
-        console.log('daterangepicker', daterangepicker );
+        log('update startDate', startDate ); // {sender: "October 2020", year: 2020, count: 9, day: "20", date: "2020-10-20"}
+        log('daterangepicker', JSON.parse( daterangepicker.getItem('datepicker')) );
     }
 
     function notifyAndStoreFirst(message) {
