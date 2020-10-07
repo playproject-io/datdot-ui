@@ -11,12 +11,14 @@ const datepicker = require('datdot-ui-datepicker')
 module.exports = datdotui
 
 function datdotui (opts) {
+  const ui = 'datdot-ui'
+  const log = debug(ui)
   const { jobs, plans } = opts
   let state = {}
-  let date = new Date()
-
+  const protocol = send => function receive(message) { log(message) }
+ 
   let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )}</div>`
-  let tableDays = bel`<div class=${css['calendar-table-days']}>${calendarDays( {data: null, style: `${css['calendar-days']}` }, calendarDaysProtocol ) }</div>`
+  let tableDays = bel`<div class=${css['calendar-table-days']}>${calendarDays( {data: null, style: `${css['calendar-days']}` }, protocol ) }</div>`
   const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
   const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
   weekList.map( w => {
@@ -52,7 +54,7 @@ function datdotui (opts) {
 
       <div class=${css['ui-datepicker']}>
         <h2 class=${css.title}>Date Picker</h2>
-        ${datepicker(datepickerProtocol)}
+        ${datepicker(protocol)}
       </div>
 
     </section>
@@ -100,15 +102,6 @@ function datdotui (opts) {
     // check tab
     tabChanges('state', state.tabs)
     
-    return receive(message)
-  }
-
-  function datepickerProtocol(message) {
-    console.log('message', message)
-    const { from, flow, type, body, count, month, year, days } = message
-    const log = debug(from)
-    const logger = log.extend('datepicker')
-    logger.log = domlog
     return receive(message)
   }
 
@@ -170,6 +163,8 @@ function datdotui (opts) {
       const logger = log.extend('receive >')
       logger(flow, type, body, `${month} ${year}, ${days} days`)
    }
+
+   log('<= received', message)
    
   }
 

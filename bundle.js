@@ -19370,7 +19370,6 @@ module.exports = exports.default;
  * This is the web browser implementation of `debug()`.
  */
 
-exports.log = log;
 exports.formatArgs = formatArgs;
 exports.save = save;
 exports.load = load;
@@ -19536,18 +19535,14 @@ function formatArgs(args) {
 }
 
 /**
- * Invokes `console.log()` when available.
- * No-op when `console.log` is not a "function".
+ * Invokes `console.debug()` when available.
+ * No-op when `console.debug` is not a "function".
+ * If `console.debug` is not available, falls back
+ * to `console.log`.
  *
  * @api public
  */
-function log(...args) {
-	// This hackery is required for IE8/9, where
-	// the `console.log` function doesn't have 'apply'
-	return typeof console === 'object' &&
-		console.log &&
-		console.log(...args);
-}
+exports.log = console.debug || console.log || (() => {});
 
 /**
  * Save `namespaces`.
@@ -19750,13 +19745,11 @@ function setup(env) {
 		debug.namespace = namespace;
 		debug.enabled = createDebug.enabled(namespace);
 		debug.useColors = createDebug.useColors();
-		debug.color = selectColor(namespace);
+		debug.color = createDebug.selectColor(namespace);
 		debug.destroy = destroy;
 		debug.extend = extend;
-		// Debug.formatArgs = formatArgs;
-		// debug.rawLog = rawLog;
 
-		// env-specific initialization logic for debug instances
+		// Env-specific initialization logic for debug instances
 		if (typeof createDebug.init === 'function') {
 			createDebug.init(debug);
 		}
@@ -20604,12 +20597,14 @@ const datepicker = require('datdot-ui-datepicker')
 module.exports = datdotui
 
 function datdotui (opts) {
+  const ui = 'datdot-ui'
+  const log = debug(ui)
   const { jobs, plans } = opts
   let state = {}
-  let date = new Date()
-
+  const protocol = send => function receive(message) { log(message) }
+ 
   let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )}</div>`
-  let tableDays = bel`<div class=${css['calendar-table-days']}>${calendarDays( {data: null, style: `${css['calendar-days']}` }, calendarDaysProtocol ) }</div>`
+  let tableDays = bel`<div class=${css['calendar-table-days']}>${calendarDays( {data: null, style: `${css['calendar-days']}` }, protocol ) }</div>`
   const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
   const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
   weekList.map( w => {
@@ -20645,7 +20640,7 @@ function datdotui (opts) {
 
       <div class=${css['ui-datepicker']}>
         <h2 class=${css.title}>Date Picker</h2>
-        ${datepicker(datepickerProtocol)}
+        ${datepicker(protocol)}
       </div>
 
     </section>
@@ -20693,15 +20688,6 @@ function datdotui (opts) {
     // check tab
     tabChanges('state', state.tabs)
     
-    return receive(message)
-  }
-
-  function datepickerProtocol(message) {
-    console.log('message', message)
-    const { from, flow, type, body, count, month, year, days } = message
-    const log = debug(from)
-    const logger = log.extend('datepicker')
-    logger.log = domlog
     return receive(message)
   }
 
@@ -20763,6 +20749,8 @@ function datdotui (opts) {
       const logger = log.extend('receive >')
       logger(flow, type, body, `${month} ${year}, ${days} days`)
    }
+
+   log('<= received', message)
    
   }
 
@@ -20897,13 +20885,11 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
     const date = new Date()
     const today = getDate(date)
     const logger = log.extend(`${name}`)
+    const send = protocol( receive )
+    send( {from: name, type } )
+    let first, second
+    
 
-    if (mode === 'datepicker-range-days') {
-        var send = protocol(receive)
-        send( {from: name, type: 'init' } )
-    }
-
-    let start, end
     if ( data === null ) {
         // if no data
         var count = getMonth(date) // initial month
@@ -20934,11 +20920,31 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
     return el
 
     function receive( message ) {
-        log(`${name} received`, message )
         const { type, body } = message
-        if ( status === 'start-select-by-other') return 
+        log(message)
+        if (type === 'clear') return actionClear(body)
+        if (type === 'selecting-second') return actionSelectingSecond(body)
+        if (type === 'not-selecting-second') return actionKeepFirst(body)
+        if (type === 'first-selected-by-endcal') return setStatus('first-selected-by-endcal')
+        if (type === 'first-selected-by-startcal') return setStatus('first-selected-by-startcal')
+        if (type === 'second-selected') return setStatus('second-selected-by-other')
+        if (type === 'color-from-start') return actionColorFromStart()
+        if (type === 'color-to-end') return actionColorToEnd()
     }
 
+    function actionColorFromStart () { colorRange(0, first) }
+    function actionColorToEnd () { colorRange(first, days + 1) }
+    function actionKeepFirst (body) { onlyKeepFirst() }
+    function actionSelectingSecond (body) { colorRange(0, first) }
+    function actionClear (body) { clearSelf() }
+
+    function clearSelf () {
+        for (var i = 0; i < buttons.length; i++) {
+            buttons[i].classList.remove(css['date-selected'])
+            buttons[i].classList.remove(css['date-in-range'])
+        } 
+        first = second = void 0
+      }
 
     function setStatus(nextStatus) {
         status = nextStatus
@@ -20957,7 +20963,7 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
 
         logger('send', message)
         
-        return protocol(message)
+        return send(message)
     }
 
     function multipleDays(target, date) {
@@ -20970,141 +20976,121 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
         }
         target.classList.toggle(css['date-selected'])
         logger('send', message)
-        return protocol(message)
+        return send(message)
     }
 
-    function selectRangeDays(target, date) {
-        if ( status === 'unselected') {
-            start = date
-            setStatus('start-select')
-            type = 'value/start'
-            // console.log('frist clicked', start, '->', end);
-        } else if ( status === 'start-select') {
-            end = date
-            setStatus('end-select')
-            type = 'value/end'
-        } else if ( status === 'end-select') {
-            start = date
-            end = void 0
-            setStatus('start-select')
-            // console.log('first clicked', start, '->', end)
-        } else if ( status === 'start-select-by-other') {
-            end = date
-            setStatus('end-select')
-            type = 'value/end'
-        } else if ( status === 'end-select-by-other' ) {
-            end = date
-            setStatus('start-select')
-        }
-        
-        if (status === 'start-select') {
-            buttons.map( btn => {
-                btn.classList.remove(css['date-selected'])
-                btn.classList.remove(css['date-in-range'])
-                btn.removeAttribute('aira-selected')
-            })
-        }
-
-        target.setAttribute('aria-selected', true)
-        target.classList.add(css['date-selected'])
-
-        const message = { sender: name, flow: ui, currentStatus: status, type, body: date, day: target.dataset.number, count, month, year }
-        const logger = log.extend(`day> ${message.body}`)
-        logger('send', message)
-
-        return send( message )
+    function selectRangeDays(btn, date) {
+        const current = parseInt(btn.dataset.number)
+        if (btn.getAttribute('role') !== 'button') return
+        if (status === 'cleared') return selectFirst(btn, current)
+        if (status === 'first-selected-by-self') return selectSecond(btn, current)
+        if (status === 'first-selected-by-startcal') return selectSecond(btn, current)
+        if (status === 'first-selected-by-endcal') return selectSecond(btn, current)
+        if (status === 'second-selected-by-self') return selectFirst(btn, current)
+        if (status === 'second-selected-by-other') return selectFirst(btn, current)
     }
+
+    function selectSecond(btn, current) {
+        const logger = log.extend('select')
+        second = current
+        endDate = btn.dataset.date
+        btn.classList.add(css['date-selected'])
+        btn.setAttribute('aria-selected', true)
+        setStatus('second-selected-by-self')
+        log('second select', name, second, endDate);
+        logger(`from: ${startDate} to ${endDate}`)
+        send({ from: name, type: 'second-selected' })
+        return send({ from: name, type: 'value/second', body: second })
+    }
+
+    function selectFirst(btn, current) {
+        clearSelf()
+        send({ from: name, type: 'cleared' }) // send notification
+        first = current
+        startDate = btn.dataset.date
+        log('first select', name, first, startDate);
+        btn.classList.add(css['date-selected'])
+        btn.setAttribute('aria-selected', true)
+        setStatus('first-selected-by-self')
+        return send({ from: name, type: 'value/first', body: first })
+      }
 
     function onmouseenter(event) {
-        let storage = window.sessionStorage
-        let datepicker = JSON.parse(storage.getItem('datepicker'))
-        setStatus( datepicker.status )
-        if (status === 'unselected') return
-        // from calendar self
-        if (status === 'start-select') return
-        if (status === 'end-select') return
-        // from other calendar
-        if (status === 'start-select-by-other') return selectSecond(datepicker)
-        if (status === 'end-select-by-other') return
-        if (status === 'end-selecting-by-other') return
+        if (status === 'cleared') return
+        if (status === 'first-selected-by-self') return
+        if (status === 'second-selected-by-self') return
+        if (status === 'first-selected-by-startcal') return notifyOther()
+        if (status === 'first-selected-by-endcal') return notifyOther()
+        if (status === 'second-selected-by-other') return
     }
 
-    function selectSecond(datepicker) {
-        let from = datepicker.startDate.from
-        if ( from === name ) return setStatus('start-select')
-    }
+    function notifyOther() {
+        return send({ from: name, type: 'selecting-second' })
+      }
 
     function onmouseleave(event) {
-        let storage = window.sessionStorage
-        let datepicker = JSON.parse(storage.getItem('datepicker'))
-        setStatus( datepicker.status )
-        if (status === 'unselected') return
+        if (status === 'cleared') return
         // from calendar self
-        if (status === 'start-select') return onlyKeepFirst()
-        if (status === 'end-select') return
-        // from other calendar
-        if (status === 'start-select-by-other') return onlyKeepFirst()
-        if (status === 'end-select-by-other') return
+        if (status === 'first-selected-by-self') return onlyKeepFirst()
+        if (status === 'second-selected-by-self') return
+        if (status === 'first-selected-by-startcal') return clearAndNotify()
+        if (status === 'first-selected-by-endcal') return clearAndNotify()
+        if (status === 'second-selected-by-self-by-other') return
     }
 
+    function clearAndNotify() {
+        clearSelf()
+        return send({from: name, status, type: 'not-selecting-second', body: ''})
+    }
     function onlyKeepFirst() {
         buttons.map( btn => { 
-            btn.dataset.date !== startDate ? btn.classList.remove(css['date-in-range']) : null
+            if (parseInt(btn.dataset.number) == first) 
+                btn.classList.add(css['date-selected'])
+            else {
+                btn.classList.remove(css['date-selected'])
+                btn.classList.remove(css['date-in-range'])
+            }
         })
-        setStatus('start-select-by-other')
-        return send({sender: name, status, type: 'selecting-second'})
+        // setStatus('first-selected-by-self-by-other')
+        // return send({from: name, status, type: 'selecting-second'})
     }
 
     function onmousemove(event) {
-        // console.log('start', start, 'startDate', startDate)
         const btn = event.target
-        const current = btn.dataset.date
-        // console.log(current);
-        if (!current) return
-        if (status === 'unselected') return
-        // from calendar self
-        if (status === 'start-select') return markRange(btn, start, current)
-        if (status === 'end-select') return 
-        // from other calendar
-        if (status === 'start-select-by-other') return markAllCalendars(current)
-    }
-
-    function markAllCalendars(current) {
-        let storage = window.sessionStorage
-        let datepicker = JSON.parse(storage.getItem('datepicker'))
-        let start = datepicker.startDate.date.split('-')
-        let end = current.split('-')
-        let startYear = parseInt(start[0] )
-        let startMonth = parseInt(start[1])
-        let endYear = parseInt(end[0])
-        let endMonth = parseInt(end[1])
-        let number = parseInt(end[2])
-
-        if (startYear < endYear) return colorRange(0, number)
-        else if ( startYear > endYear) return colorRange(number, days+1)
-        else if (startMonth > endMonth) return colorRange(number, days+1)
-        else if (startMonth < endMonth) return colorRange(0, number)
+        const current = parseInt(btn.dataset.number)
+        
+        if (btn.getAttribute('role') !=  'button') return
+        if (status === 'cleared') return
+        if (status === 'first-selected-by-self') return markRange(btn, first, current)
+        if (status === 'second-selected-by-self') return 
+        if (status === 'second-selected-by-other') return
+        if (status === 'first-selected-by-startcal')return markRange(btn, 0, current)
+        if (status === 'first-selected-by-endcal')return markRange(btn, current, days + 1)
     }
     
-
-    function markRange(btn, start, current) {
-        if ( startDate !== void 0 && start === void 0) {
-            start = startDate.date
-        }
-        let select1 = parseInt(start.split('-')[2])
-        let select2 = parseInt(current.split('-')[2])
-        if (select1 < select2 ) colorRange(select1, select2)
-        else colorRange(select2, select1)
-    }
+    function markRange (btn, A, B) {
+        if (A === B) return onlyKeepFirst()
+        if (A < B) colorRange(A, B)
+        else colorRange(B, A)
+      }
 
     function colorRange(first, second) {
-        // console.log( first, second);
-        return buttons.map( btn => {
-            let number = btn.dataset.number
-            if (number < first) btn.classList.remove(css['date-in-range'])
+        // log( first, second );
+        return buttons.forEach( btn => {
+            let number = parseInt(btn.dataset.number)
+            if (number < first) {
+                btn.classList.remove(css['date-in-range'])
+                btn.classList.remove(css['date-selected'])
+            }
             if (number === first) btn.classList.add(css['date-selected'])
             if (number > first) btn.classList.add(css['date-in-range'])
-            if (number > second - 1 ) btn.classList.remove(css['date-in-range'])
+            if (number === second) btn.classList.add(css['date-selected'])
+            if (number > second - 1 ) {
+                btn.classList.remove(css['date-in-range']) 
+            }
+            if (number > second) {
+                btn.classList.remove(css['date-selected'])
+            }
         })
     }
 
@@ -21112,7 +21098,6 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
         if (mode === 'datepicker-multiple-days') multipleDays(target, date)
         else if (mode === 'datepicker-range-days') selectRangeDays(target, date)
         else selectOneDay(target, date)
-        logger('date selected', date)
     }
 
     function getSpaceInPrevMonth() {
@@ -21367,9 +21352,12 @@ function datepicker(protocol) {
     // init
     let ui = 'ui-datepicker'
     const log = debug(ui)
+    const sendParent = protocol( receive )
+    var send2SubComponent
+    sendParent(`from ${ui} say hi`)
     let mode = 'datepicker-range-days' // datepicker-multiple-days, datepicker-range-days, datepicker-repeat
     let data = {
-        status: 'unselected',
+        status: 'cleared',
         type: 'init',
         startDate: {
             from: null,
@@ -21385,6 +21373,8 @@ function datepicker(protocol) {
     let datepicker = JSON.parse(daterangepicker.getItem('datepicker'))
     let status = datepicker.status
     let type = datepicker.type
+    let recipients = {}
+    let value = {}
     let selectedDates = []
     let startDate, endDate
     // date init
@@ -21397,8 +21387,8 @@ function datepicker(protocol) {
     let daysInCurrnetMonth = getDaysInMonth( new Date(year, count))
     let daysInNextMonth = getDaysInMonth( new Date( year, count+1))
     // render calendar
-    let cal1 = calendar({name: `${currentMonth} ${year}`, mode, status, type, data: {from: ui, count, month: currentMonth, year, days: daysInCurrnetMonth}}, calendarProtocol)
-    let cal2 = calendar({name: `${nextMonth} ${year}`, mode, status, type, data: {from: ui, count: nextCount, month: nextMonth, year, days: daysInNextMonth}}, calendarProtocol)
+    let cal1 = calendar({name: `${currentMonth} ${year}`, mode, status, type, data: {from: ui, count, month: currentMonth, year, days: daysInCurrnetMonth}}, selectRangeDaysProtocol)
+    let cal2 = calendar({name: `${nextMonth} ${year}`, mode, status, type, data: {from: ui, count: nextCount, month: nextMonth, year, days: daysInNextMonth}}, selectRangeDaysProtocol)
     
     // elements
     const iconPrev = svg( { css: `${css.icon} ${css['icon-prev']}`, path: './src/node_modules/assets/arrow-left.svg' } )
@@ -21441,60 +21431,69 @@ function datepicker(protocol) {
         protocol(message)
     }
 
-    function calendarProtocol(send) {
-        return (message) => {
-            if (mode === 'datepicker-multiple-days') return multipleDaysProtocol(message)
-            if (mode === 'datepicker-range-days') return selectRangeDaysProtocol(message, send)
+    // function calendarProtocol(send) {
+    //     send2SubComponent = send
+    //     send2SubComponent(`from ${ui} to say hi`)
+    //     return (message) => {
+    //         if (mode === 'datepicker-multiple-days') return multipleDaysProtocol(message)
+    //         if (mode === 'datepicker-range-days') return selectRangeDaysProtocol(message, send)
+    //     }
+    // }
+
+    function selectRangeDaysProtocol(send) {
+        send2SubComponent = send
+        send2SubComponent(`from ${ui} to say hi`)
+        return message => {
+            const { from, type, body } = message
+            const logger = log.extend('calendar')
+            if (type === 'init') { 
+                logger(`${from} ready`)
+                return storeSendFN(from, send) 
+            }
+            if (type === 'value/first') return notifyAndStoreFirst(from, body)
+            if (type === 'value/second') return notifyParent(body)
+            if (type === 'selecting-second') return notifyOtherCalenderSelectingLast(from)
+            if (type === 'cleared') { 
+                log('cleared from', from)
+                return clearOther(from === currentMonth ? nextMonth : currentMonth) 
+            }
+            else return forwardMessage(from, message)
         }
+        
     }
 
-    function selectRangeDaysProtocol(message, send) {
-        const { from, type, body } = message
-        const logger = log.extend('calendar')
-        // const { from, type, body, day, count, year } = message
-        // console.log(ui, 'receive', `${from} type: ${type}` );
-
-        // console.log('currentStatus', currentStatus );
-        // console.log( 'selected date', message)
-
-        // if ( startDate !== void 0 && endDate === void 0 ) {
-        //     let selectSecond = { year, count, day, date: body }
-        //     if ( isAfter( new Date(year, count, day), new Date( startDate.year, startDate.count, startDate.day) ) )  {
-        //         endDate = selectSecond
-        //     } else {
-        //         endDate = Object.assign({}, startDate)
-        //         startDate = selectSecond
-        //     }
-        //     // console.log('parent protocol recevie: second clicked')
-        //     // console.log('start', startDate.date, 'to', endDate.date )
-        // } else {
-        //     startDate = { year, count, day, date: body }
-        //     endDate = void 0
-        //     // console.log('parent protocol recevie: first clicked');
-        //     // console.log('start', startDate.date, 'to', endDate)
-        // }
-      
-        if (type === 'init') return logger(`${from} is ready`)
-        if (type === 'value/start') return notifyAndStoreFirst( message )
-        if (type === 'value/end') return notifyAndStoreLast(message)
-        if (type === 'selecting-second') return notifyOther(message, send)
-        send(message)
+    function notifyParent (body) {
+        value.last = body
+        return sendParent({type: 'value', body: value })
     }
 
-    function notifyOther(message, send) {
-        const { sender, status, type, body, day, count, year } = message
-        datepicker.status = status
-        datepicker.type = type
-        daterangepicker.setItem('datepicker', JSON.stringify(datepicker))
-        log('notifyOther received', message)
-        log('daterangepicker', JSON.parse( daterangepicker.getItem('datepicker') ) )
-        send( message )
+    function notifyAndStoreFirst(from, body) {
+        value.first = body
+        const list = [from]
+        const receivers = filterOutRecipients(list)
+        const type = from === currentMonth ? 'first-selected-by-startcal' : 'first-selected-by-endcal'
+        return broadcast(receivers, { from: name, type })
+    }
+
+    function storeSendFN (from, send) {
+        recipients[from] = send
+      }
+
+    function clearOther (from) {
+        const send = recipients[from]
+        return send2SubComponent({ from, type: 'clear' }) // send command
+    }
+
+    function forwardMessage(from, message) {
+        const list = [from]
+        const receivers = filterOutRecipients(list)
+        broadcast(receivers, message)
     }
 
     function notifyAndStoreLast (message) {
-        const { sender, currentStatus: status, type, body, day, count, year } = message
-        start = {sender: startDate.sender, year: startDate.year, count: startDate.count, day: startDate.day, date: startDate.date}
-        end = {sender, year, count, day, date: body }
+        const { from, status, type, body, day, count, year } = message
+        start = {from: startDate.from, year: startDate.year, count: startDate.count, day: startDate.day, date: startDate.date}
+        end = {from, year, count, day, date: body }
 
         if ( start.year > end.year) {
             return updateSelectDates(status, type, end, start)
@@ -21517,26 +21516,31 @@ function datepicker(protocol) {
         endDate = end
         datepicker.status = status
         datepicker.type = type
-        datepicker.startDate = { from: start.sender, date: start.date }
-        datepicker.endDate = end === void 0 ? null : { from: end.sender, date: end.date }
+        datepicker.startDate = { from: start.from, date: start.date }
+        datepicker.endDate = end === void 0 ? null : { from: end.from, date: end.date }
         daterangepicker.setItem('datepicker', JSON.stringify(datepicker))
-        log('update startDate', startDate ); // {sender: "October 2020", year: 2020, count: 9, day: "20", date: "2020-10-20"}
-        log('daterangepicker', JSON.parse( daterangepicker.getItem('datepicker')) );
+        // log('update startDate', startDate ); // {from: "October 2020", year: 2020, count: 9, day: "20", date: "2020-10-20"}
+        // log('daterangepicker', JSON.parse( daterangepicker.getItem('datepicker')) );
     }
 
-    function notifyAndStoreFirst(message) {
-        const { sender, currentStatus: status, type, body, day, count, year } = message
-        start = {sender, year, count, day, date: body }
-        updateSelectDates(status, type, start)
+    function notifyOtherCalenderSelectingLast (from) {
+        if (from === currentMonth) {
+            const send = recipients[nextMonth]
+            return send({ from: name, type: 'color-from-start' })
+        }
+        if (from === nextMonth) {
+            const send = recipients[currentMonth]
+            return send({ from: name, type: 'color-to-end' })
+        }
     }
-
+    
     function multipleDaysProtocol(message) {
         const { body } = message
         // if not found date in selectedDates then push body
         if ( selectedDates.indexOf( body ) === -1) selectedDates.push(body)
         else selectedDates.splice(selectedDates.indexOf( body ), 1)
         // change status
-        if ( selectedDates.length === 0) setStatus('unselected')
+        if ( selectedDates.length === 0) setStatus('cleared')
         if ( selectedDates.length > 0) setStatus('selected-dates')
         // console.log(selectedDates);
         return protocol(message)
@@ -21561,7 +21565,30 @@ function datepicker(protocol) {
     }
 
     function calendarRender({name, mode, type, count, year, month, days, selectedDates, startDate, endDate}) {
-        return calendar({page: ui, name, mode, type, status, data: {from: ui, count, month, year, days}, selectedDates, startDate, endDate}, calendarProtocol)
+        return calendar({page: ui, name, mode, type, status, data: {from: ui, count, month, year, days}, selectedDates, startDate, endDate}, selectRangeDaysProtocol)
+    }
+
+    function receive( message ) {
+        log(message)
+    }
+
+    function notifyParent (body) {
+        value.last = body
+        return sendParent({ from: name, type: 'value', body: value })
+      }
+
+    function filterOutRecipients (list) {
+        const receivers = Object.keys(recipients) // get all calendar names
+          .filter(name => !list.includes(name)) // only keep name different from message sender
+          .map(name => recipients[name]) // for each name, get send function
+        return receivers // e.g. receivers = [send2, send4]
+      }
+
+    function broadcast (receivers, message) {
+        for (var i = 0, len = receivers.length; i < len; i++) {
+            const send = receivers[i]
+            send(message) // forward message from sender to all receivers send(msg)
+        }
     }
 }
 
