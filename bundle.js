@@ -20914,6 +20914,7 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
     el.onmousemove  = onmousemove
     el.onmouseleave = onmouseleave
     el.onmouseenter = onmouseenter
+    el.onclick = onclick
 
     // if ( startDate !== void 0 ) console.log(`mode: ${mode}, type: ${type}, status: ${status}, selectRangeDates: ${startDate.date} => ${endDate.date}`);
 
@@ -21018,23 +21019,23 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
     function onmouseenter(event) {
         if (status === 'cleared') return
         if (status === 'first-selected-by-self') return
-        if (status === 'second-selected-by-self') return
         if (status === 'first-selected-by-startcal') return notifyOther()
         if (status === 'first-selected-by-endcal') return notifyOther()
+        if (status === 'second-selected-by-self') return
         if (status === 'second-selected-by-other') return
     }
 
     function notifyOther() {
+        log("notifyOtehr: selecting-second", name);
         return send({ from: name, type: 'selecting-second' })
       }
 
     function onmouseleave(event) {
         if (status === 'cleared') return
-        // from calendar self
         if (status === 'first-selected-by-self') return onlyKeepFirst()
-        if (status === 'second-selected-by-self') return
         if (status === 'first-selected-by-startcal') return clearAndNotify()
         if (status === 'first-selected-by-endcal') return clearAndNotify()
+        if (status === 'second-selected-by-self') return
         if (status === 'second-selected-by-self-by-other') return
     }
 
@@ -21094,10 +21095,23 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
         })
     }
 
-    function onclick(target, date) {
-        if (mode === 'datepicker-multiple-days') multipleDays(target, date)
-        else if (mode === 'datepicker-range-days') selectRangeDays(target, date)
-        else selectOneDay(target, date)
+    // function onclick(target, date) {
+    //     if (mode === 'datepicker-multiple-days') multipleDays(target, date)
+    //     else if (mode === 'datepicker-range-days') selectRangeDays(target, date)
+    //     else selectOneDay(target, date)
+    // }
+
+    function onclick(event) {
+        const btn = event.target
+        const current = parseInt(btn.dataset.number)
+        if (!current) return
+        // if (btn.getAttribute('role') !== 'button') return
+        if (status === 'cleared') return selectFirst(btn, current)
+        if (status === 'first-selected-by-self') return selectSecond(btn, current)
+        if (status === 'first-selected-by-startcal') return selectSecond(btn, current)
+        if (status === 'first-selected-by-endcal') return selectSecond(btn, current)
+        if (status === 'second-selected-by-self') return selectFirst(btn, current)
+        if (status === 'second-selected-by-other') return selectFirst(btn, current)
     }
 
     function getSpaceInPrevMonth() {
@@ -21126,7 +21140,7 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
                 var day = bel`<div role="button" class="${css['calendar-day']} ${css['disabled-day']}" tabindex="-1" aria-today=${is_today(d)} aria-label="${date}" data-date="${setDate}">${d}</div>`
             }
              else {
-                var day = bel`<div role="button" class="${css['calendar-day']} ${is_today(d) ? `${css.today}` : ''}" tabindex="-1" aria-today=${is_today(d)} aria-label="${date}" aria-selected="${is_today(d)}" data-date="${setDate}" data-number="${d}" onclick=${(el) => onclick( el.target, setDate )}>${d}</div>`
+                var day = bel`<div role="button" class="${css['calendar-day']} ${is_today(d) ? `${css.today}` : ''}" tabindex="-1" aria-today=${is_today(d)} aria-label="${date}" aria-selected="${is_today(d)}" data-date="${setDate}" data-number="${d}">${d}</div>`
             }
 
             if (selectedDates !== void 0 && selectedDates.length > 0) {
@@ -21455,7 +21469,8 @@ function datepicker(protocol) {
             if (type === 'selecting-second') return notifyOtherCalenderSelectingLast(from)
             if (type === 'cleared') { 
                 log('cleared from', from)
-                return clearOther(from === currentMonth ? nextMonth : currentMonth) 
+                console.log('select range days protocol', from);
+                return clearOther(from === `${currentMonth} ${year}` ? `${nextMonth} ${year}` : `${currentMonth} ${year}`) 
             }
             else return forwardMessage(from, message)
         }
@@ -21463,7 +21478,7 @@ function datepicker(protocol) {
     }
 
     function notifyParent (body) {
-        value.last = body
+        value.second = body
         return sendParent({type: 'value', body: value })
     }
 
@@ -21490,38 +21505,38 @@ function datepicker(protocol) {
         broadcast(receivers, message)
     }
 
-    function notifyAndStoreLast (message) {
-        const { from, status, type, body, day, count, year } = message
-        start = {from: startDate.from, year: startDate.year, count: startDate.count, day: startDate.day, date: startDate.date}
-        end = {from, year, count, day, date: body }
+    // function notifyAndStoreLast (message) {
+    //     const { from, status, type, body, day, count, year } = message
+    //     start = {from: startDate.from, year: startDate.year, count: startDate.count, day: startDate.day, date: startDate.date}
+    //     end = {from, year, count, day, date: body }
 
-        if ( start.year > end.year) {
-            return updateSelectDates(status, type, end, start)
-        } else {
-            if ( start.year === end.year ) {
-                if ( start.count > end.count) {
-                    return updateSelectDates(status, type, end, start)
-                } else {
-                    if ( start.day <= end.day ) return updateSelectDates(status, type, start, end)
-                    else return updateSelectDates(status, type, end, start)
-                }
-            } else {
-                return updateSelectDates(status, type, start, end)
-            }
-        }
-    }
+    //     if ( start.year > end.year) {
+    //         return updateSelectDates(status, type, end, start)
+    //     } else {
+    //         if ( start.year === end.year ) {
+    //             if ( start.count > end.count) {
+    //                 return updateSelectDates(status, type, end, start)
+    //             } else {
+    //                 if ( start.day <= end.day ) return updateSelectDates(status, type, start, end)
+    //                 else return updateSelectDates(status, type, end, start)
+    //             }
+    //         } else {
+    //             return updateSelectDates(status, type, start, end)
+    //         }
+    //     }
+    // }
 
-    function updateSelectDates(status, type, start, end) {
-        startDate = start
-        endDate = end
-        datepicker.status = status
-        datepicker.type = type
-        datepicker.startDate = { from: start.from, date: start.date }
-        datepicker.endDate = end === void 0 ? null : { from: end.from, date: end.date }
-        daterangepicker.setItem('datepicker', JSON.stringify(datepicker))
-        // log('update startDate', startDate ); // {from: "October 2020", year: 2020, count: 9, day: "20", date: "2020-10-20"}
-        // log('daterangepicker', JSON.parse( daterangepicker.getItem('datepicker')) );
-    }
+    // function updateSelectDates(status, type, start, end) {
+    //     startDate = start
+    //     endDate = end
+    //     datepicker.status = status
+    //     datepicker.type = type
+    //     datepicker.startDate = { from: start.from, date: start.date }
+    //     datepicker.endDate = end === void 0 ? null : { from: end.from, date: end.date }
+    //     daterangepicker.setItem('datepicker', JSON.stringify(datepicker))
+    //     // log('update startDate', startDate ); // {from: "October 2020", year: 2020, count: 9, day: "20", date: "2020-10-20"}
+    //     // log('daterangepicker', JSON.parse( daterangepicker.getItem('datepicker')) );
+    // }
 
     function notifyOtherCalenderSelectingLast (from) {
         if (from === currentMonth) {
