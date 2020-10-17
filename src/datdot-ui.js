@@ -25,96 +25,119 @@ function datdotui (opts) {
   let nextDays = getDaysInMonth(new Date(year, nextMonth))
   // store data
   let state = {}
-  const protocol = send => receive
+
   
-  function receive(message) { 
-    if (type === 'value') log(message)
-  }
- 
-  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )}</div>`
+
+  // SUB COMPONENTS
+  const timelinedays = timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )
+  const tab1 = tab({page: jobs.title, arr: jobs.tab}, tabProtocol)
+  const tab2 = tab({page: plans.title, arr: plans.tab}, tabProtocol)
+  const calendarmonth1 = calendarMonth({page: jobs.title}, calendarMonthProtocol)
+  const calendarmonth2 = calendarMonth({page: plans.title}, calendarMonthProtocol)
+  const datepicker1 = datepicker({month1: [currentMonth, currentDays, year], month2: [nextMonth, nextDays, year] }, datepickerProtocol)
+
   const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
   const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-  weekList.map( w => {
-      const div = bel`<div class=${css['calendar-week']} role="week">${w.slice(0 ,1)}</div>`
-      weekday.append(div)
-  })
+  weekList.map( w => weekday.append( bel`<div class=${css['calendar-week']} role="week">${w.slice(0 ,1)}</div>`))
 
 
   const element = bel`
   <div class=${css.wrap}>
     <section class=${css["ui-widgets"]}>
-
-      <div class=${css['ui-tab']}>
-        <h2 class=${css.title}>Tab</h2>
-        ${tab({page: jobs.title, arr: jobs.tab}, tabProtocol)}
-        ${tab({page: plans.title, arr: plans.tab}, tabProtocol)}
-      </div>
-
+      <div class=${css['ui-tab']}><h2 class=${css.title}>Tab</h2>${tab1}${tab2}</div>
       <div class=${css['ui-calendar-header']}>
         <h2 class=${css.title}>Calendar Header</h2>
-        <div class=${css["custom-header"]}>${calendarMonth({page: jobs.title}, calendarMonthProtocol)}</div>
-        <div class=${css["calendar-header-fullsize"]}>${calendarMonth({page: plans.title}, calendarMonthProtocol)}</div>
+        <div class=${css["custom-header"]}>${calendarmonth1}</div>
+        <div class=${css["calendar-header-fullsize"]}>${calendarmonth2}</div>
       </div>
-
       <div class=${css.days}>
         <h2 class=${css.title}>Timline days</h2>
-        ${inlineDays}
+        <div class=${css['calendar-timeline-days']}>${timelinedays}</div>
       </div>
-
       <div class=${css['ui-datepicker']}>
         <h2 class=${css.title}>Date Picker</h2>
-        ${datepicker({month1: [currentMonth, currentDays, year], month2: [nextMonth, nextDays, year] }, protocol)}
+        ${datepicker1}
       </div>
-
     </section>
-    
     <div class=${css.terminal}> </div>
-  </div>
-  `
-  const [section, terminal] = element.children
+  </div>`
+
+  const [, terminal] = element.children
  
-  function tabProtocol(message) {
-    const { from, flow, type, body, active} = message
-    const log = debug(from)
-    const logger = log.extend('datdot-ui')
-    const tabChanges = log.extend(`${flow} changes`)
-    // logger.log must be put first then logger()
-    logger.log = domlog
-    logger(message)
+  return element
+  /*********************************************
+    PROTOCOLS
+  *********************************************/
+  function datepickerProtocol (send) {
+    return function receiveFromDatepicker (message) {
+      const { type } = message
+      if (type === 'value') return log(message)
+      if ( message.active) {
+        const { from, flow, type, body, active} = message
+        const log = debug(from)
+        const logger = log.extend('receive >')
+        logger(flow, type, body, active)
+      }
 
-
-    if ( state.tabs == undefined ) state.tabs = new Array()
-    const foundFrom = state.tabs.some( obj => obj.from === from )
-    const foundData = state.tabs.some( obj => obj.from === from && obj.data.some( d => d.body === body ) )
-    const filterFrom = state.tabs.filter( obj => obj.from === from )
-
-    // check from if not existed then store new tab
-    if ( !foundFrom ) {
-      state.tabs.push( { from, data: [ {from, flow, type, body, active, logger} ] })
-      return tabChanges('state', state.tabs)
+    if ( message.month ) {
+        const { from, flow, type, body, count, month, year, days} = message
+        const log = debug(from)
+        const logger = log.extend('receive >')
+        logger(flow, type, body, `${month} ${year}, ${days} days`)
     }
 
-    // check from and data existed then only change current tab status
-    if ( foundData ) {
-      filterFrom.map( o => o.data.map( d => d.active = d.body === body) )
-      return tabChanges('state', state.tabs)
+    log('<= received', message)
+    
     }
+  } 
 
-    // when data is not existed then add to data
-    filterFrom.map( o => o.data.push({from, flow, type, body, active, logger}) ) 
-    
-    // check from existed then store current tab status
-    if ( foundFrom ) {
-      filterFrom.map( o => o.data.map( d => d.active = d.body === body ))
+  function tabProtocol (send) {
+    return function receiveFromTab (message) {
+      const { from, flow, type, body, active} = message
+      const log = debug(from)
+      const logger = log.extend('datdot-ui')
+      const tabChanges = log.extend(`${flow} changes`)
+      // logger.log must be put first then logger()
+      logger.log = domlog
+      logger(message)
+
+
+      if ( state.tabs == undefined ) state.tabs = new Array()
+      const foundFrom = state.tabs.some( obj => obj.from === from )
+      const foundData = state.tabs.some( obj => obj.from === from && obj.data.some( d => d.body === body ) )
+      const filterFrom = state.tabs.filter( obj => obj.from === from )
+
+      // check from if not existed then store new tab
+      if ( !foundFrom ) {
+        state.tabs.push( { from, data: [ {from, flow, type, body, active, logger} ] })
+        return tabChanges('state', state.tabs)
+      }
+
+      // check from and data existed then only change current tab status
+      if ( foundData ) {
+        filterFrom.map( o => o.data.map( d => d.active = d.body === body) )
+        return tabChanges('state', state.tabs)
+      }
+
+      // when data is not existed then add to data
+      filterFrom.map( o => o.data.push({from, flow, type, body, active, logger}) ) 
+      
+      // check from existed then store current tab status
+      if ( foundFrom ) {
+        filterFrom.map( o => o.data.map( d => d.active = d.body === body ))
+      }
+      
+      // check tab
+      tabChanges('state', state.tabs)
+
+      // @TODO: what do you want to do here? ...and why? :-)
+      // receive(message)
     }
-    
-    // check tab
-    tabChanges('state', state.tabs)
-    
-    return receive(message)
   }
 
-  function calendarMonthProtocol(message) {
+
+  function calendarMonthProtocol (message) {
+    throw new Error('@TODO: refactor into proper protocol (see tabProtocol) as inspiration')
     const { from, flow, type, body, count, month, year, days } = message
     const log = debug(from)
     const logger = log.extend('datdot-ui')
@@ -136,46 +159,36 @@ function datdotui (opts) {
     timeline.append(typeTimeline)
     table.append(typeTable)
     
-    return receive(message)
+    // @TODO: what do you want to do here? ...and why? :-)
+    // return receive(message)
   }
-  
-  function calendarDaysProtocol(message){
+
+  function calendarDaysProtocol (message) {
+    throw new Error('@TODO: refactor into proper protocol (see tabProtocol) as inspiration')
+
     const { from, flow, type, body, count, month, year, days} = message
     const log = debug(from)
     const logger = log.extend('calendar-days')
     logger.log = domlog
     logger(`${type} day ${body}`, message) 
 
-    return receive(message)
+    // @TODO: what do you want to do here? ...and why? :-)
+    // return receive(message)
   }
 
-  function timelineDaysProtocol(message){
+  function timelineDaysProtocol (message) {
+    throw new Error('@TODO: refactor into proper protocol (see tabProtocol) as inspiration')
+
     const { from, flow, type, body, count, month, year, days} = message
     const log = debug(from)
     const logger = log.extend('timeline-days')
     logger.log = domlog
     logger(`${type} day ${body}`, message) 
-    return receive(message)
+
+    // @TODO: what do you want to do here? ...and why? :-)
+    // return receive(message)
   }
 
-  function receive(message) {
-    if ( message.active) {
-      const { from, flow, type, body, active} = message
-      const log = debug(from)
-      const logger = log.extend('receive >')
-      logger(flow, type, body, active)
-    }
-
-   if ( message.month ) {
-      const { from, flow, type, body, count, month, year, days} = message
-      const log = debug(from)
-      const logger = log.extend('receive >')
-      logger(flow, type, body, `${month} ${year}, ${days} days`)
-   }
-
-   log('<= received', message)
-   
-  }
 
   function domlog(...args) {
     for (let obj of args) {
@@ -184,10 +197,10 @@ function datdotui (opts) {
       if (typeof obj === 'object' && obj.flow === 'ui-tab') var {from, flow, type, body} = obj
     }
     const el = bel`<div>${from + " > "}  ${flow}: ${body} ${type} ${month && month} ${year && year}${days ? `, ${days} days` : null }</div>`
-    terminal.insertBefore(el, terminal.firstChild)
+    // terminal.insertBefore(el, terminal.firstChild)
+    terminal.append(el)
+    terminal.scrollTop = terminal.scrollHeight
   }
-
-  return element
 
 }
 const css = csjs`
@@ -217,7 +230,7 @@ button:active, button:focus {
 .terminal div {
   margin: 10px 0;
 }
-.terminal div:first-child {
+.terminal div:last-child {
   color: #FFF500;
   font-weight: bold;
 }
