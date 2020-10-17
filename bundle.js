@@ -20587,6 +20587,7 @@ process.umask = function() { return 0; };
 const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
+const { lightFormat, getYear, getMonth, getDaysInMonth } = require('date-fns')
 // widgets
 const tab = require('datdot-ui-tab')
 const calendarMonth = require('datdot-ui-calendar-month')
@@ -20597,14 +20598,26 @@ const datepicker = require('datdot-ui-datepicker')
 module.exports = datdotui
 
 function datdotui (opts) {
-  const ui = 'datdot-ui'
-  const log = debug(ui)
+  const log = debug('datdot-ui')
   const { jobs, plans } = opts
+  // set init date
+  const date = new Date()
+  let year = getYear(date)
+  // get current month
+  let currentMonth = getMonth(date)
+  let currentDays = getDaysInMonth(date)
+  // get next month
+  let nextMonth = currentMonth+1
+  let nextDays = getDaysInMonth(new Date(year, nextMonth))
+  // store data
   let state = {}
-  const protocol = send => function receive(message) { log(message) }
+  const protocol = send => receive
+  
+  function receive(message) { 
+    if (type === 'value') log(message)
+  }
  
   let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )}</div>`
-  let tableDays = bel`<div class=${css['calendar-table-days']}>${calendarDays( {data: null, style: `${css['calendar-days']}` }, protocol ) }</div>`
   const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
   const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
   weekList.map( w => {
@@ -20630,17 +20643,13 @@ function datdotui (opts) {
       </div>
 
       <div class=${css.days}>
-        <h2 class=${css.title}>Days</h2>
+        <h2 class=${css.title}>Timline days</h2>
         ${inlineDays}
-        <div class=${css['calendar-section']}>
-          ${weekday}
-          ${tableDays}
-        </div>
       </div>
 
       <div class=${css['ui-datepicker']}>
         <h2 class=${css.title}>Date Picker</h2>
-        ${datepicker(protocol)}
+        ${datepicker({month1: [currentMonth, currentDays, year], month2: [nextMonth, nextDays, year] }, protocol)}
       </div>
 
     </section>
@@ -20870,119 +20879,133 @@ button:active, button:focus {
 
 }
 `
-},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-days":263,"datdot-ui-calendar-month":264,"datdot-ui-datepicker":266,"datdot-ui-tab":268,"datdot-ui-timeline-days":269,"debug":255}],263:[function(require,module,exports){
-const debug = require('debug')
+},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-days":263,"datdot-ui-calendar-month":264,"datdot-ui-datepicker":266,"datdot-ui-tab":268,"datdot-ui-timeline-days":269,"date-fns":142,"debug":255}],263:[function(require,module,exports){
 const bel = require('bel')
 const csjs = require('csjs-inject')
-const { format, getDay, getDate, getMonth, getYear, getDaysInMonth, isToday, isBefore, isAfter, isSameDay } = require('date-fns')
+const debug = require('debug')
+const { isToday, format, isBefore, isAfter, isPast, getDay, getDate, getMonth, getYear, getDaysInMonth } = require('date-fns')
 
-module.exports = datdot_ui_calendar_days
+module.exports = calendarDays
 
-function datdot_ui_calendar_days({name, mode, type, status, style, data = null, selectedDates, startDate, endDate}, protocol) {
-    // init
-    const ui = 'ui-calendar-days'
-    const log = debug(ui)
-    const date = new Date()
-    const today = getDate(date)
-    const logger = log.extend(`${name}`)
-    const send = protocol( receive )
-    send( {from: name, type } )
-    let first, second
+function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'}, protocol) {
+    const log = debug('ui-calendar-days')
+    const sendToParent = protocol( receive )
+    sendToParent({ from: name, type: 'init' })
     
+    const calendar = makeDays(days)
+    const buttons = [...calendar.children]
 
-    if ( data === null ) {
-        // if no data
-        var count = getMonth(date) // initial month
-        var month = format(date, 'MMMM') // get capitalization month
-        var year = getYear(date) // initial year
-        var days = getDaysInMonth(date) // initial days
-    } else {
-        // if data is loaded
-        var { from, flow, count, month, year, days } = data
-    }
+    calendar.onmousemove = onmousemove
+    calendar.onclick = onclick
+    calendar.onmouseleave = onmouseleave
+    calendar.onmouseenter = onmouseenter
 
-    const is_today = (d) => isToday(new Date(year, count, d)) 
-
-    // element
-    const el = bel`<section role="calendar-days" class=${style}></section>`
-
-    getSpaceInPrevMonth()
-    makeCalendar()
-
-    const buttons = [...el.children]
-
-    el.onmousemove  = onmousemove
-    el.onmouseleave = onmouseleave
-    el.onmouseenter = onmouseenter
-    el.onclick = onclick
-
-    // if ( startDate !== void 0 ) console.log(`mode: ${mode}, type: ${type}, status: ${status}, selectRangeDates: ${startDate.date} => ${endDate.date}`);
-
-    return el
-
-    function receive( message ) {
-        const { type, body } = message
-        log(message)
-        if (type === 'clear') return actionClear(body)
+    return calendar
+    
+    function receive( message ) { 
+        const {body, type} = message
+        log('msg from datepicker', message)
+        if (type === 'clear') return actionClear()
         if (type === 'selecting-second') return actionSelectingSecond(body)
         if (type === 'not-selecting-second') return actionKeepFirst(body)
-        if (type === 'first-selected-by-endcal') return setStatus('first-selected-by-endcal')
         if (type === 'first-selected-by-startcal') return setStatus('first-selected-by-startcal')
+        if (type === 'first-selected-by-endcal') return setStatus('first-selected-by-endcal')
         if (type === 'second-selected') return setStatus('second-selected-by-other')
         if (type === 'color-from-start') return actionColorFromStart()
         if (type === 'color-to-end') return actionColorToEnd()
     }
+    
+    function actionSelectingSecond(body) {
+        colorRange(0, first)
+    }
 
-    function actionColorFromStart () { colorRange(0, first) }
-    function actionColorToEnd () { colorRange(first, days + 1) }
-    function actionKeepFirst (body) { onlyKeepFirst() }
-    function actionSelectingSecond (body) { colorRange(0, first) }
-    function actionClear (body) { clearSelf() }
+    function actionKeepFirst(body) {
+        onlyKeepFirst()
+    }
 
-    function clearSelf () {
-        for (var i = 0; i < buttons.length; i++) {
-            buttons[i].classList.remove(css['date-selected'])
-            buttons[i].classList.remove(css['date-in-range'])
-        } 
-        first = second = void 0
-      }
+    function actionColorToEnd() {
+        colorRange(first, days + 1)
+    }
 
-    function setStatus(nextStatus) {
+    function actionColorFromStart() {
+        colorRange(0, first)
+    }
+
+    function actionClear() {
+        clearSelf()
+    }
+
+    function setStatus( nextStatus ) {
+        log('setStatus', JSON.stringify({ from: status, type: 'status', body: nextStatus}, 0, 2))
         status = nextStatus
+        // sendToParent({from: name, type: 'status', body: nextStatus} )
     }
 
-    function selectOneDay(target, date) {
-        const message = { from: from ? from : ui, flow: ui, type: 'click', body: date, count, month, year, days }
-        const logger = log.extend(`day> ${message.body}`)
-        const children = [...el.children]
-        children.forEach( btn => {
+    function clearSelf() {
+        buttons.map( btn => {
+            btn.classList.remove(css['date-in-range'])
             btn.classList.remove(css['date-selected'])
-            btn.removeAttribute('aira-selected')
         })
-        target.classList.add(css['date-selected'])
-        target.setAttribute('aria-selected', true)
-
-        logger('send', message)
-        
-        return send(message)
+        first = second = void 0
     }
 
-    function multipleDays(target, date) {
-        const message = { from: from ? from : ui, flow: ui, type: 'click', body: date, count, month, year, days }
-        const logger = log.extend(`day> ${message.body}`)
-        if (target.classList.contains(css['date-selected'])) {
-            target.setAttribute('aria-selected', false)
-        } else {
-            target.setAttribute('aria-selected', true)
-        }
-        target.classList.toggle(css['date-selected'])
-        logger('send', message)
-        return send(message)
+    function clearAndNotify() {
+        clearSelf()
+        return sendToParent({from: name, type: 'not-selecting-second', body: ''})
     }
 
-    function selectRangeDays(btn, date) {
-        const current = parseInt(btn.dataset.number)
-        if (btn.getAttribute('role') !== 'button') return
+    function notifyOther() {
+        log('notifyOther')
+        return sendToParent({from: name, type: 'selecting-second'})
+    }
+
+    function onlyKeepFirst() {
+        buttons.map( btn => {
+            const num = parseInt(btn.dataset.num)
+            if ( num !== first) {
+                btn.classList.remove(css['date-in-range'])
+                btn.classList.remove(css['date-selected'])
+            }
+        })
+    }
+
+    function onmouseenter(event) {
+        log('onmouseenter', {from: name, status})
+        if (status === 'cleared') return
+        if (status === 'first-selected-by-self') return
+        if (status === 'first-selected-by-startcal') return notifyOther()
+        if (status === 'first-selected-by-endcal') return notifyOther()
+        if (status === 'second-selected-by-self') return
+        if (status === 'second-selected-by-other') return
+    }
+
+    function onmouseleave(event) {
+        log('onmouseleave', {from: name, status})
+        if (status === 'cleared') return
+        if (status === 'first-selected-by-self') return onlyKeepFirst()
+        if (status === 'first-selected-by-startcal') return clearAndNotify()
+        if (status === 'first-selected-by-endcal') return clearAndNotify()
+        if (status === 'second-selected-by-self') return
+        if (status === 'second-selected-by-other') return
+    }
+
+    function onmousemove(event) {
+        const btn = event.target
+        const current = parseInt(btn.dataset.num)
+        if (!current || btn.classList.contains(css["disabled-day"])) return
+        if (status === 'cleared') return
+        if (status === 'first-selected-by-self') return markRange(btn, first, current)
+        if (status === 'first-selected-by-startcal') return markRange(btn, 0, current)
+        if (status === 'first-selected-by-endcal') return markRange(btn, first, current)
+        if (status === 'second-selected-by-self') return
+        if (status === 'second-selected-by-other') return
+    }
+
+    function onclick(event) {
+        const btn = event.target
+        const current = parseInt(btn.dataset.num)
+        log('clicked', name)
+        if (!current || btn.classList.contains(css["disabled-day"])) return
         if (status === 'cleared') return selectFirst(btn, current)
         if (status === 'first-selected-by-self') return selectSecond(btn, current)
         if (status === 'first-selected-by-startcal') return selectSecond(btn, current)
@@ -20992,202 +21015,112 @@ function datdot_ui_calendar_days({name, mode, type, status, style, data = null, 
     }
 
     function selectSecond(btn, current) {
-        const logger = log.extend('select')
         second = current
-        endDate = btn.dataset.date
-        btn.classList.add(css['date-selected'])
-        btn.setAttribute('aria-selected', true)
         setStatus('second-selected-by-self')
-        log('second select', name, second, endDate);
-        logger(`from: ${startDate} to ${endDate}`)
-        send({ from: name, type: 'second-selected' })
-        return send({ from: name, type: 'value/second', body: second })
+        sendToParent({from: name, type: 'second-selected'})
+        return sendToParent({from: name, type: 'value/second', body: [month, second, year] })
+    }
+
+    function clearSelf() {
+        for (var i = 0; i < buttons.length; i++) {
+            buttons[i].classList.remove(css['date-selected'])
+        }
+        first = second = void 0
     }
 
     function selectFirst(btn, current) {
         clearSelf()
-        send({ from: name, type: 'cleared' }) // send notification
+        sendToParent({from: name, type: 'cleared'})
         first = current
-        startDate = btn.dataset.date
-        log('first select', name, first, startDate);
         btn.classList.add(css['date-selected'])
-        btn.setAttribute('aria-selected', true)
         setStatus('first-selected-by-self')
-        return send({ from: name, type: 'value/first', body: first })
-      }
-
-    function onmouseenter(event) {
-        if (status === 'cleared') return
-        if (status === 'first-selected-by-self') return
-        if (status === 'first-selected-by-startcal') return notifyOther()
-        if (status === 'first-selected-by-endcal') return notifyOther()
-        if (status === 'second-selected-by-self') return
-        if (status === 'second-selected-by-other') return
+        return sendToParent({from: name, type: 'value/first', body: [month, first, year] })
     }
 
-    function notifyOther() {
-        log("notifyOtehr: selecting-second", name);
-        return send({ from: name, type: 'selecting-second' })
-      }
-
-    function onmouseleave(event) {
-        if (status === 'cleared') return
-        if (status === 'first-selected-by-self') return onlyKeepFirst()
-        if (status === 'first-selected-by-startcal') return clearAndNotify()
-        if (status === 'first-selected-by-endcal') return clearAndNotify()
-        if (status === 'second-selected-by-self') return
-        if (status === 'second-selected-by-self-by-other') return
-    }
-
-    function clearAndNotify() {
-        clearSelf()
-        return send({from: name, status, type: 'not-selecting-second', body: ''})
-    }
-    function onlyKeepFirst() {
-        buttons.map( btn => { 
-            if (parseInt(btn.dataset.number) == first) 
-                btn.classList.add(css['date-selected'])
-            else {
-                btn.classList.remove(css['date-selected'])
-                btn.classList.remove(css['date-in-range'])
-            }
-        })
-        // setStatus('first-selected-by-self-by-other')
-        // return send({from: name, status, type: 'selecting-second'})
-    }
-
-    function onmousemove(event) {
-        const btn = event.target
-        const current = parseInt(btn.dataset.number)
-        
-        if (btn.getAttribute('role') !=  'button') return
-        if (status === 'cleared') return
-        if (status === 'first-selected-by-self') return markRange(btn, first, current)
-        if (status === 'second-selected-by-self') return 
-        if (status === 'second-selected-by-other') return
-        if (status === 'first-selected-by-startcal')return markRange(btn, 0, current)
-        if (status === 'first-selected-by-endcal')return markRange(btn, current, days + 1)
-    }
-    
-    function markRange (btn, A, B) {
+    function markRange(btn, A, B) {
         if (A === B) return onlyKeepFirst()
         if (A < B) colorRange(A, B)
         else colorRange(B, A)
-      }
+    }
 
     function colorRange(first, second) {
-        // log( first, second );
-        return buttons.forEach( btn => {
-            let number = parseInt(btn.dataset.number)
-            if (number < first) {
+        buttons.map( btn => {
+            let current = parseInt(btn.dataset.num)
+            if (!current || btn.classList.contains(css["disabled-day"])) return
+            if (current <= first) {
+                btn.classList.remove(css['date-selected'])
                 btn.classList.remove(css['date-in-range'])
-                btn.classList.remove(css['date-selected'])
+            } 
+            if (current === first ) { 
+                btn.classList.add(css['date-selected'])
             }
-            if (number === first) btn.classList.add(css['date-selected'])
-            if (number > first) btn.classList.add(css['date-in-range'])
-            if (number === second) btn.classList.add(css['date-selected'])
-            if (number > second - 1 ) {
-                btn.classList.remove(css['date-in-range']) 
+            if (current > first) {
+                btn.classList.add(css['date-in-range'])
             }
-            if (number > second) {
+            if (current === second) {
+                btn.classList.add(css['date-selected'])
+            }
+            if (current > second - 1) {
+                btn.classList.remove(css['date-in-range'])
+            }
+            if (current > second) {
                 btn.classList.remove(css['date-selected'])
+                btn.classList.remove(css['date-in-range'])
             }
         })
     }
 
-    // function onclick(target, date) {
-    //     if (mode === 'datepicker-multiple-days') multipleDays(target, date)
-    //     else if (mode === 'datepicker-range-days') selectRangeDays(target, date)
-    //     else selectOneDay(target, date)
-    // }
+    function makeDays(days) {
+        const el = bel`<section role="calendar-days" class=${css["calendar-days"]}></section>`
+        // make space for week
+        getSpaceInPrevMonth(el)
 
-    function onclick(event) {
-        const btn = event.target
-        const current = parseInt(btn.dataset.number)
-        if (!current) return
-        // if (btn.getAttribute('role') !== 'button') return
-        if (status === 'cleared') return selectFirst(btn, current)
-        if (status === 'first-selected-by-self') return selectSecond(btn, current)
-        if (status === 'first-selected-by-startcal') return selectSecond(btn, current)
-        if (status === 'first-selected-by-endcal') return selectSecond(btn, current)
-        if (status === 'second-selected-by-self') return selectFirst(btn, current)
-        if (status === 'second-selected-by-other') return selectFirst(btn, current)
+        for (let i = 1; i < days + 1; i++) {
+            let formatDate = format(new Date(year, month, i), 'd MMMM yyyy, EEEE')
+            let setDate = format(new Date(year, month, i), 'yyyy-MM-d')
+            let btn = bel`<button role="button" aria-selected="false" tabindex="-1" data-num="${i}" aria-label="${formatDate}" data-date="${setDate}">${i}</button>`
+            if ( isToday(new Date(year, month, i)) ) {
+                btn.classList.add(css.today)
+                btn.setAttribute('aria-today', true)
+            } 
+            else { 
+                btn.classList.add(css.day)
+                if ( isPast(new Date(year, month, i)) ) btn.classList.add(css["disabled-day"])
+                btn.setAttribute('aria-today', false)
+            }
+            el.append(btn)
+        }
+        
+        return el
     }
 
-    function getSpaceInPrevMonth() {
+    function getSpaceInPrevMonth(el) {
         // get days in previous month
-        var daysInPrevMonth = getDaysInMonth(new Date(year, count - 1))
+        let daysInPrevMonth = getDaysInMonth(new Date(year, month-1))
         // get day in prev month which means to add how many spans
-        var dayInPrevMonth = getDay(new Date(year, count-1, daysInPrevMonth))
-        // generate span for prev month
-        for (let s = dayInPrevMonth; s > 0; s-- ) {
+        let dayInPrevMonth = getDay(new Date(year, month-1, daysInPrevMonth))
+        for (let s = dayInPrevMonth; s > 0; s--) {
             let span = bel`<div class=${css['day-prev']} role="presentation" aria-label aria-disabled="false"></div>`
-            // span.classList.add(css['day-prev'])
-            el.append(span)
+            el.append((span))
         }
     }
 
-    function makeCalendar() {
-        for (let d = 1; d <= days; d++ ) {
-            let date = format(new Date(year, count, d), 'd MMMM yyyy, EEEE')
-            let setDate = format(new Date(year, count, d), 'yyyy-M-d')
-            
-            if (d < today && count <= new Date().getMonth() && year <= new Date().getFullYear() ) {
-                var day = bel`<div role="button" class="${css['calendar-day']} ${css['disabled-day']}" tabindex="-1" aria-today=${is_today(d)} aria-label="${date}" data-date="${setDate}">${d}</div>`
-            } else if ( count < new Date().getMonth() && year <= new Date().getFullYear() ) {
-                var day = bel`<div role="button" class="${css['calendar-day']} ${css['disabled-day']}" tabindex="-1" aria-today=${is_today(d)} aria-label="${date}" data-date="${setDate}">${d}</div>`
-            } else if ( year < new Date().getFullYear()) {
-                var day = bel`<div role="button" class="${css['calendar-day']} ${css['disabled-day']}" tabindex="-1" aria-today=${is_today(d)} aria-label="${date}" data-date="${setDate}">${d}</div>`
-            }
-             else {
-                var day = bel`<div role="button" class="${css['calendar-day']} ${is_today(d) ? `${css.today}` : ''}" tabindex="-1" aria-today=${is_today(d)} aria-label="${date}" aria-selected="${is_today(d)}" data-date="${setDate}" data-number="${d}">${d}</div>`
-            }
 
-            if (selectedDates !== void 0 && selectedDates.length > 0) {
-                selectedDates.map( date => {
-                    if ( date === setDate ) {
-                        day.setAttribute('aria-selected', true)
-                        day.classList.add(css['date-selected'])
-                    }
-                })
-            }
-
-            if (startDate !== void 0) {
-                if ( startDate.date === setDate) {
-                    day.setAttribute('aria-selected', true)
-                    day.classList.add(css['date-selected'])
-                }
-            }
-
-            if (endDate !== void 0) {
-                if ( endDate.date === setDate) {
-                    day.setAttribute('aria-selected', true)
-                    day.classList.add(css['date-selected'])
-                }
-
-                // if select startDate is starting after current date then add style and attribute
-                if (isAfter(new Date( endDate.year, endDate.count, endDate.day), new Date(year, count, d))) {
-                        day.setAttribute('aria-selected', true)
-                        day.classList.add(css['date-in-range'])
-                        
-                    // if select startDate is starting after current date then add style and attribute
-                    if ( isAfter(new Date(year, count, d), new Date(startDate.year, startDate.count, startDate.day) )) {
-                        day.setAttribute('aria-selected', true)
-                        day.classList.add(css['date-in-range'])
-                    } else {
-                        day.setAttribute('aria-selected', false)
-                        day.classList.remove(css['date-in-range'])
-                    }
-                } 
-            }
-            
-            el.append(day)
-        }
-    }
 }
 
 const css = csjs`
-.calendar-day {
+.calendar-days {
+    display: grid;
+    grid-template-rows: auto;
+    grid-template-columns: repeat(7, minmax(30px, auto));
+    justify-items: center;
+}
+button {
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+.day {
     display: grid;
     align-items: center;
     justify-content: center;
@@ -21196,10 +21129,7 @@ const css = csjs`
     cursor: pointer;
     transition: color 0.25s, background-color 0.25s ease-in-out;
 }
-.calendar-day:focus, .calendar-day:active {
-    outline: dotted 1px #c9c9c9;
-}
-.calendar-day:hover {
+.day:hover {
     color: #fff;
     background-color: #000;
 }
@@ -21210,19 +21140,16 @@ const css = csjs`
     color: #fff;
     background-color: #000;
 }
+.day-prev {}
+.disabled-day, .disabled-day:hover {
+    color: #BBBBBB;
+    background: none;
+    cursor: default;
+}
 .date-in-range {
     color: #000;
     background-color: #EAEAEA;
 }
-.disabled-day {
-    color: #BBBBBB;
-    cursor: default;
-}
-.disabled-day:hover {
-    color: #BBBBBB;
-    background: none;
-}
-.day-prev {}
 `
 },{"bel":3,"csjs-inject":6,"date-fns":142,"debug":255}],264:[function(require,module,exports){
 const debug = require('debug')
@@ -21351,152 +21278,97 @@ function monthResult(number) {
     return result
 }
 },{"date-fns":142}],266:[function(require,module,exports){
-const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
-const { format, getMonth, getYear, getDaysInMonth, isBefore, isAfter } = require('date-fns')
+const debug = require('debug')
 const monthResult = require('month-result')
 // widgets
 const calendarDays = require('../datdot-ui-calendar-days')
-const calendarMonth = require('../datdot-ui-calendar-month')
 const svg = require('svg')
+
 module.exports = datepicker
 
-function datepicker(protocol) {
-    // init
-    let ui = 'ui-datepicker'
-    const log = debug(ui)
-    const sendParent = protocol( receive )
-    var send2SubComponent
-    sendParent(`from ${ui} say hi`)
-    let mode = 'datepicker-range-days' // datepicker-multiple-days, datepicker-range-days, datepicker-repeat
-    let data = {
-        status: 'cleared',
-        type: 'init',
-        startDate: {
-            from: null,
-            date: null
-        },
-        endDate: {
-            from: null,
-            date: null
-        }
-    }
-    let daterangepicker = window.sessionStorage
-    daterangepicker.setItem('datepicker', JSON.stringify(data))
-    let datepicker = JSON.parse(daterangepicker.getItem('datepicker'))
-    let status = datepicker.status
-    let type = datepicker.type
-    let recipients = {}
+function datepicker({name = 'concal', month1, month2, status = 'cleared'}, protocol) {
+    const log = debug('ui-datepicker')
+    let msg = { from: name, type: 'ready'}
+    log(JSON.stringify(msg, 0, 2))
+    const sendToParent = protocol( receive )
+    let months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+    let name1 = `${months[month1[0]]} ${month1[2]}`
+    let name2 = `${months[month2[0]]} ${month2[2]}`
+    const recipients = {}
     let value = {}
-    let selectedDates = []
-    let startDate, endDate
-    // date init
-    let date = new Date()
-    let year = getYear(date)
-    let count = getMonth(date)
-    let nextCount = getMonth( new Date(year, count+1) )
-    let currentMonth = format( new Date(year, count), 'MMMM')
-    let nextMonth = format( new Date(year, count+1), 'MMMM')
-    let daysInCurrnetMonth = getDaysInMonth( new Date(year, count))
-    let daysInNextMonth = getDaysInMonth( new Date( year, count+1))
-    // render calendar
-    let cal1 = calendar({name: `${currentMonth} ${year}`, mode, status, type, data: {from: ui, count, month: currentMonth, year, days: daysInCurrnetMonth}}, selectRangeDaysProtocol)
-    let cal2 = calendar({name: `${nextMonth} ${year}`, mode, status, type, data: {from: ui, count: nextCount, month: nextMonth, year, days: daysInNextMonth}}, selectRangeDaysProtocol)
-    
-    // elements
+    let sendSubComponent, first, second
+     // elements
+    const cal1 = calendarDays({name: name1, month: month1[0], days: month1[1], year: month1[2], status }, calendarDaysProtocol)
+    const cal2 = calendarDays({name: name2, month: month2[0], days: month2[1], year: month2[2], status }, calendarDaysProtocol)
     const iconPrev = svg( { css: `${css.icon} ${css['icon-prev']}`, path: './src/node_modules/assets/arrow-left.svg' } )
     const iconNext = svg( { css: `${css.icon} ${css['icon-next']}`, path: './src/node_modules/assets/arrow-right.svg' } )
-    const prevButton  = bel`<button role="button" aria-label="Previous month" class="${css.btn} ${css.prev}" onclick=${()=>triggle(prevButton)}>${iconPrev}</button>`
-    const nextButton = bel`<button role="button" aria-label="Next month" class="${css.btn} ${css.next}" onclick=${()=>triggle(nextButton)}>${iconNext}</button>`
-    const calendarsDisplay = bel`<div class=${css['datepicker-body']}></div>`
-    calendarsDisplay.append(cal1, cal2)
-    const el = bel`<section class=${css.datepicker}>${prevButton}${calendarsDisplay}${nextButton}</section>`
-
-    return el
-
-    function calendar({page = 'calendar', name, mode, type, status, selectedDates, selectRangeDates, data}, protocol) {
-        const logger = log.extend('calendar')
-        // logger(`${name} is ready, calendar status: ${status}`);
-        const { from = page, count, month, year, days } = data
-        let header = calendarMonth({page: ui, getDate: new Date(year, count), mode}, calendarMonthProtocol)
-        let tableDays = bel`<div class=${css['calendar-table-days']}>${calendarDays( {page, name, mode, type, status, style: `${css['calendar-days']}`, data, selectedDates, startDate, endDate}, protocol ) }</div>`
-        const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
-        const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-        weekList.map( w => {
-            const div = bel`<div class=${css['calendar-week']} role="week">${w.slice(0 ,1)}</div>`
-            weekday.append(div)
-        })
-
-        const el = bel`
+    const prevMonth  = bel`<button role="button" aria-label="Previous month" class="${css.btn} ${css.prev}" onclick=${triggerPreviousMonth}>${iconPrev}</button>`
+    const nextMonth = bel`<button role="button" aria-label="Next month" class="${css.btn} ${css.next}" onclick=${triggerNextMonth}>${iconNext}</button>`
+    
+    const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    
+    
+    const element = bel`
+    <div class=${css.datepicker}>
+        <div class=${css["calendar-month"]}>${prevMonth}${nextMonth}</div>
         <div class=${css.calendar}>
-            ${header}
-            <div class=${css['calendar-section']}>
-            ${weekday}
-            ${tableDays}
-            </div>
-        </div>`
+            ${monthTitle(name1)}
+            ${makeWeekDays()}
+            ${cal1}
+        </div>
+        <div class=${css.calendar}>
+            ${monthTitle(name2)}
+            ${makeWeekDays()}
+            ${cal2}
+        </div>
+        
+    </div>`
 
+    return element
+
+    function monthTitle(name) {
+        return bel`<h2 class=${css.title}>${name}</h2>`
+    }
+
+    function triggerPreviousMonth() {
+        log('prev month');
+    }
+    function triggerNextMonth() {
+        log('next month');
+    }
+
+    function makeWeekDays() {
+        const el = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
+        weekList.map( w => {
+            let div = bel`<div class=${css['calendar-week']} role="week">${w.slice(0 ,1)}</div>`
+            el.append(div)
+        })
         return el
     }
 
-
-    function calendarMonthProtocol(message) {
-        protocol(message)
+    function calendarDaysProtocol(send) {
+        sendSubComponent = send
+        return receive
     }
 
-    // function calendarProtocol(send) {
-    //     send2SubComponent = send
-    //     send2SubComponent(`from ${ui} to say hi`)
-    //     return (message) => {
-    //         if (mode === 'datepicker-multiple-days') return multipleDaysProtocol(message)
-    //         if (mode === 'datepicker-range-days') return selectRangeDaysProtocol(message, send)
-    //     }
-    // }
-
-    function selectRangeDaysProtocol(send) {
-        send2SubComponent = send
-        send2SubComponent(`from ${ui} to say hi`)
-        return message => {
-            const { from, type, body } = message
-            const logger = log.extend('calendar')
-            if (type === 'init') { 
-                logger(`${from} ready`)
-                return storeSendFN(from, send) 
-            }
-            if (type === 'value/first') return notifyAndStoreFirst(from, body)
-            if (type === 'value/second') return notifyParent(body)
-            if (type === 'selecting-second') return notifyOtherCalenderSelectingLast(from)
-            if (type === 'cleared') { 
-                log('cleared from', from)
-                console.log('select range days protocol', from);
-                return clearOther(from === `${currentMonth} ${year}` ? `${nextMonth} ${year}` : `${currentMonth} ${year}`) 
-            }
-            else return forwardMessage(from, message)
-        }
-        
+    function receive( message ) {
+        const {from, type, body} = message
+        log('msg from calendarDays', message) 
+        if (type === 'init') return storeSendFN(from, sendSubComponent)
+        if (type === 'value/first') return notifyAndStoreFirst(from, body)
+        if (type === 'value/second') return notifyParent(body)
+        if (type === 'selecting-second') return notifyOtherCalenderSelectingLast(from)
+        if (type === 'cleared') return clearOther( from === name1 ? name2 : name1)
+        else return forwardMessage(from, message)
     }
 
-    function notifyParent (body) {
-        value.second = body
-        return sendParent({type: 'value', body: value })
-    }
-
-    function notifyAndStoreFirst(from, body) {
-        value.first = body
-        const list = [from]
-        const receivers = filterOutRecipients(list)
-        const type = from === currentMonth ? 'first-selected-by-startcal' : 'first-selected-by-endcal'
-        return broadcast(receivers, { from: name, type })
-    }
-
-    function storeSendFN (from, send) {
-        recipients[from] = send
-      }
-
-    function clearOther (from) {
-        const send = recipients[from]
-        return send2SubComponent({ from, type: 'clear' }) // send command
+    function filterOutRecipients(list) {
+        const receivers = Object.keys(recipients)
+                               .filter( name => !list.includes(name))
+                               .map(name => recipients[name])
+        return receivers
     }
 
     function forwardMessage(from, message) {
@@ -21505,136 +21377,76 @@ function datepicker(protocol) {
         broadcast(receivers, message)
     }
 
-    // function notifyAndStoreLast (message) {
-    //     const { from, status, type, body, day, count, year } = message
-    //     start = {from: startDate.from, year: startDate.year, count: startDate.count, day: startDate.day, date: startDate.date}
-    //     end = {from, year, count, day, date: body }
+    function clearOther(from) {
+        const send = recipients[from]
+        return send({ from: name, type: 'clear'})
+    }
 
-    //     if ( start.year > end.year) {
-    //         return updateSelectDates(status, type, end, start)
-    //     } else {
-    //         if ( start.year === end.year ) {
-    //             if ( start.count > end.count) {
-    //                 return updateSelectDates(status, type, end, start)
-    //             } else {
-    //                 if ( start.day <= end.day ) return updateSelectDates(status, type, start, end)
-    //                 else return updateSelectDates(status, type, end, start)
-    //             }
-    //         } else {
-    //             return updateSelectDates(status, type, start, end)
-    //         }
-    //     }
-    // }
+    function notifyParent(body) {
+        value.second = body
+        const message = {from: name, type: 'value', body: value} 
+        log('notify parent', message)
+        return sendToParent(message)
+    }
 
-    // function updateSelectDates(status, type, start, end) {
-    //     startDate = start
-    //     endDate = end
-    //     datepicker.status = status
-    //     datepicker.type = type
-    //     datepicker.startDate = { from: start.from, date: start.date }
-    //     datepicker.endDate = end === void 0 ? null : { from: end.from, date: end.date }
-    //     daterangepicker.setItem('datepicker', JSON.stringify(datepicker))
-    //     // log('update startDate', startDate ); // {from: "October 2020", year: 2020, count: 9, day: "20", date: "2020-10-20"}
-    //     // log('daterangepicker', JSON.parse( daterangepicker.getItem('datepicker')) );
-    // }
-
-    function notifyOtherCalenderSelectingLast (from) {
-        if (from === currentMonth) {
-            const send = recipients[nextMonth]
-            return send({ from: name, type: 'color-from-start' })
+    function notifyOtherCalenderSelectingLast(from) {
+        log('notifyOtherCalenderSelectingLast', from)
+        if (from === name1) {
+            const send = recipients[name2]
+            const message  = {from: name, type: 'color-from-start'}
+            log(message)
+            return send( message )
         }
-        if (from === nextMonth) {
-            const send = recipients[currentMonth]
-            return send({ from: name, type: 'color-to-end' })
+
+        if (from === name2) {
+            const send = recipients[name1]
+            const message = {from: name, type: 'color-to-end'}
+            log(message)
+            return send(message)
         }
     }
     
-    function multipleDaysProtocol(message) {
-        const { body } = message
-        // if not found date in selectedDates then push body
-        if ( selectedDates.indexOf( body ) === -1) selectedDates.push(body)
-        else selectedDates.splice(selectedDates.indexOf( body ), 1)
-        // change status
-        if ( selectedDates.length === 0) setStatus('cleared')
-        if ( selectedDates.length > 0) setStatus('selected-dates')
-        // console.log(selectedDates);
-        return protocol(message)
+    function notifyAndStoreFirst(from, body) {
+        value.first = body
+        const list = [from]
+        const receivers = filterOutRcipients(list)
+        const type = from === name1 ? 'first-selected-by-startcal' : 'first-selected-by-endcal'
+        return broadcast( receivers, {from: name, type}) 
     }
 
-    function triggle(target) {
-        if (target.classList.contains(css.prev)) {
-            // decreemnt 2 months
-            nextCount = count - 1
-            count -= 2
-        } else {
-            // incremenet 2 months
-            count += 2
-            nextCount = count+1
-        }
-        let month1 = monthResult(count)
-        let month2 = monthResult(nextCount)
-        let updateCal1 = calendarRender({name: `${month1.month} ${month1.year}`, mode, type, ...month1, selectedDates, startDate, endDate})
-        let updateCal2 = calendarRender({name: `${month2.month} ${month2.year}`, mode, type, ...month2, selectedDates, startDate, endDate})
-        calendarsDisplay.innerHTML = ''
-        calendarsDisplay.append(updateCal1, updateCal2)
+    function storeSendFN(from, send) {
+        recipients[from] = send
     }
 
-    function calendarRender({name, mode, type, count, year, month, days, selectedDates, startDate, endDate}) {
-        return calendar({page: ui, name, mode, type, status, data: {from: ui, count, month, year, days}, selectedDates, startDate, endDate}, selectRangeDaysProtocol)
+    function filterOutRcipients(list) {
+        const receivers = Object.keys(recipients)
+                                .filter( name => !list.includes(name))
+                                .map( name => recipients[name])
+        return receivers
     }
 
-    function receive( message ) {
-        log(message)
-    }
-
-    function notifyParent (body) {
-        value.last = body
-        return sendParent({ from: name, type: 'value', body: value })
-      }
-
-    function filterOutRecipients (list) {
-        const receivers = Object.keys(recipients) // get all calendar names
-          .filter(name => !list.includes(name)) // only keep name different from message sender
-          .map(name => recipients[name]) // for each name, get send function
-        return receivers // e.g. receivers = [send2, send4]
-      }
-
-    function broadcast (receivers, message) {
-        for (var i = 0, len = receivers.length; i < len; i++) {
+    function broadcast(receivers, message) {
+        for ( let i = 0, len = receivers.length; i < len; i++) {
             const send = receivers[i]
-            send(message) // forward message from sender to all receivers send(msg)
+            log('boradcast', message)
+            send(message)
         }
     }
+
 }
+
 
 const css = csjs`
 .datepicker {
+    position: relative;
     display: flex;
+    max-width: 510px;
 }
 .datepicker-body {
     display: grid;
     grid-template-rows: auto;
     grid-template-columns: repeat(2, 210px);
     grid-gap: 35px;
-}
-.calendar {}
-.calendarHeader {}
-.calendar-weekday {
-    display: grid;
-    grid-template-rows: auto;
-    grid-template-columns: repeat(7, minmax(30px, auto));
-    justify-items: center;
-}
-.calendar-week {}
-.calendar-table-days {}
-.calendar-days {
-    display: grid;
-    grid-template-rows: auto;
-    grid-template-columns: repeat(7, minmax(30px, auto));
-    justify-items: center;
-}
-.calendar-section {
-    font-size: 12px;
 }
 .btn {
     background: none;
@@ -21649,7 +21461,6 @@ const css = csjs`
 .btn:active, .btn:hover {
     background-color: #C9C9C9;
 }
-.btn:active div > svg path, .btn:hover div > svg path {}
 .prev {}
 .next {}
 .icon svg path {
@@ -21657,11 +21468,33 @@ const css = csjs`
 }
 .icon-prev {}
 .icon-next {}
-.date-selected-range {
-    background-color: #EAEAEA;
+.calendar-month {
+    position: absolute;
+    z-index: 9;
+    top: 8px;
+    display: flex;
+    justify-content: space-between;
+    width: 100%;
+}
+.calendar-weekday {
+    display: grid;
+    grid-template-rows: 30px;
+    grid-template-columns: repeat(7, minmax(30px, auto));
+    justify-items: center;
+    font-size: 12px;
+}
+.calendar-week {
+    
+}
+.calendar {
+    margin-left: 30px;
+}
+.title {
+    font-size: 18px;
+    text-align: center;
 }
 `
-},{"../datdot-ui-calendar-days":263,"../datdot-ui-calendar-month":264,"bel":3,"csjs-inject":6,"date-fns":142,"debug":255,"month-result":267,"svg":270}],267:[function(require,module,exports){
+},{"../datdot-ui-calendar-days":263,"bel":3,"csjs-inject":6,"debug":255,"month-result":267,"svg":270}],267:[function(require,module,exports){
 arguments[4][265][0].apply(exports,arguments)
 },{"date-fns":142,"dup":265}],268:[function(require,module,exports){
 const bel = require(('bel'))

@@ -1,6 +1,7 @@
 const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
+const { lightFormat, getYear, getMonth, getDaysInMonth } = require('date-fns')
 // widgets
 const tab = require('datdot-ui-tab')
 const calendarMonth = require('datdot-ui-calendar-month')
@@ -11,14 +12,26 @@ const datepicker = require('datdot-ui-datepicker')
 module.exports = datdotui
 
 function datdotui (opts) {
-  const ui = 'datdot-ui'
-  const log = debug(ui)
+  const log = debug('datdot-ui')
   const { jobs, plans } = opts
+  // set init date
+  const date = new Date()
+  let year = getYear(date)
+  // get current month
+  let currentMonth = getMonth(date)
+  let currentDays = getDaysInMonth(date)
+  // get next month
+  let nextMonth = currentMonth+1
+  let nextDays = getDaysInMonth(new Date(year, nextMonth))
+  // store data
   let state = {}
-  const protocol = send => function receive(message) { log(message) }
+  const protocol = send => receive
+  
+  function receive(message) { 
+    if (type === 'value') log(message)
+  }
  
   let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )}</div>`
-  let tableDays = bel`<div class=${css['calendar-table-days']}>${calendarDays( {data: null, style: `${css['calendar-days']}` }, protocol ) }</div>`
   const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
   const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
   weekList.map( w => {
@@ -44,17 +57,13 @@ function datdotui (opts) {
       </div>
 
       <div class=${css.days}>
-        <h2 class=${css.title}>Days</h2>
+        <h2 class=${css.title}>Timline days</h2>
         ${inlineDays}
-        <div class=${css['calendar-section']}>
-          ${weekday}
-          ${tableDays}
-        </div>
       </div>
 
       <div class=${css['ui-datepicker']}>
         <h2 class=${css.title}>Date Picker</h2>
-        ${datepicker(protocol)}
+        ${datepicker({month1: [currentMonth, currentDays, year], month2: [nextMonth, nextDays, year] }, protocol)}
       </div>
 
     </section>
