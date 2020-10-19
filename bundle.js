@@ -20881,8 +20881,9 @@ const { isToday, format, isBefore, isAfter, isPast, getDay, getDate, getMonth, g
 
 module.exports = calendarDays
 
-function calendarDays({ name = 'ui-calendar-days', month, days, year, status = 'cleared'}, protocol) {
-    const log = debug(name)
+function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'}, protocol) {
+    const widget = 'ui-calendar-days'
+    const log = debug(`${widget}/${name}`)
     // @TODO: what is the real name?
     // * is it 'ui-calendar-days' ?
     // * or is it 'calendar' ?
@@ -20902,7 +20903,7 @@ function calendarDays({ name = 'ui-calendar-days', month, days, year, status = '
     
     function receive( message ) { 
         const {body, type} = message
-        log('msg from datepicker', message)
+        log('msg from ui-datepicker', message)
         if (type === 'clear') return actionClear()
         if (type === 'selecting-second') return actionSelectingSecond(body)
         if (type === 'not-selecting-second') return actionKeepFirst(body)
@@ -21293,7 +21294,7 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
     // * is it 'ui-calendar-days' ?
     // * or is it 'calendar' ?
     // * or is it maybe: 'calendar/ui-calendar-days' ???
-    // * none of this answer, I would perfer called it datepicker as same as other plugins calls
+    // * none of this answer, I would perfer called it datepicker as same as other plugins call
     const log = debug(name)
     let msg = { from: name, type: 'ready'}
     log(JSON.stringify(msg, 0, 2))
@@ -21360,7 +21361,7 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
 
     function receive( message ) {
         const {from, type, body} = message
-        log('msg from calendarDays', message) 
+        log('msg from ui-calendarDays', message) 
         if (type === 'init') return storeSendFN(from, sendSubComponent)
         if (type === 'value/first') return notifyAndStoreFirst(from, body)
         if (type === 'value/second') return notifyParent(body)
