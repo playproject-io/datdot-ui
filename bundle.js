@@ -248,7 +248,7 @@ module.exports.default = module.exports
 module.exports.createElement = belCreateElement
 
 },{"./appendChild":2,"hyperx":258}],4:[function(require,module,exports){
-(function (global){
+(function (global){(function (){
 'use strict';
 
 var csjs = require('csjs');
@@ -265,7 +265,7 @@ function csjsInserter() {
 
 module.exports = csjsInserter;
 
-}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
+}).call(this)}).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
 },{"csjs":9,"insert-css":259}],5:[function(require,module,exports){
 'use strict';
 
@@ -19363,7 +19363,7 @@ function toDate(argument) {
 
 module.exports = exports.default;
 },{"../_lib/requiredArgs/index.js":36}],255:[function(require,module,exports){
-(function (process){
+(function (process){(function (){
 /* eslint-env browser */
 
 /**
@@ -19624,7 +19624,7 @@ formatters.j = function (v) {
 	}
 };
 
-}).call(this,require('_process'))
+}).call(this)}).call(this,require('_process'))
 },{"./common":256,"_process":261}],256:[function(require,module,exports){
 
 /**
@@ -20611,156 +20611,150 @@ function datdotui (opts) {
   let nextDays = getDaysInMonth(new Date(year, nextMonth))
   // store data
   let state = {}
-  const protocol = send => receive
   
-  function receive(message) { 
-    if (type === 'value') log(message)
-  }
- 
-  let inlineDays = bel`<div class=${css['calendar-timeline-days']}>${timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )}</div>`
+  // SUB COMPONENTS
+  const timelinedays = timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )
+  const tab1 = tab({from: jobs.title, arr: jobs.tab}, tabProtocol)
+  const tab2 = tab({from: plans.title, arr: plans.tab}, tabProtocol)
+  const calendarmonth1 = calendarMonth({from: jobs.title}, calendarMonthProtocol)
+  const calendarmonth2 = calendarMonth({from: plans.title}, calendarMonthProtocol)
+  const datepicker1 = datepicker({month1: [currentMonth, currentDays, year], month2: [nextMonth, nextDays, year] }, datepickerProtocol)
+
   const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
   const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-  weekList.map( w => {
-      const div = bel`<div class=${css['calendar-week']} role="week">${w.slice(0 ,1)}</div>`
-      weekday.append(div)
-  })
+  weekList.map( w => weekday.append( bel`<div class=${css['calendar-week']} role="week">${w.slice(0 ,1)}</div>`))
 
 
   const element = bel`
   <div class=${css.wrap}>
     <section class=${css["ui-widgets"]}>
 
+      <!--- tab start -->
       <div class=${css['ui-tab']}>
         <h2 class=${css.title}>Tab</h2>
-        ${tab({page: jobs.title, arr: jobs.tab}, tabProtocol)}
-        ${tab({page: plans.title, arr: plans.tab}, tabProtocol)}
+        ${tab1}
+        ${tab2}
       </div>
+      <!--- // tab end -->
 
+      <!--- ui-calendar-month start -->
       <div class=${css['ui-calendar-header']}>
         <h2 class=${css.title}>Calendar Header</h2>
-        <div class=${css["custom-header"]}>${calendarMonth({page: jobs.title}, calendarMonthProtocol)}</div>
-        <div class=${css["calendar-header-fullsize"]}>${calendarMonth({page: plans.title}, calendarMonthProtocol)}</div>
+        <div class=${css["custom-header"]}>${calendarmonth1}</div>
+        <div class=${css["calendar-header-fullsize"]}>${calendarmonth2}</div>
       </div>
+      <!--- // ui-calendar-month end -->
 
+      <!--- ui-calendar-timeline-days start -->
       <div class=${css.days}>
         <h2 class=${css.title}>Timline days</h2>
-        ${inlineDays}
+        <div class=${css['calendar-timeline-days']}>${timelinedays}</div>
       </div>
+      <!--- // ui-calendar-timeline-days end -->
 
+      <!--- ui-datepicker start -->
       <div class=${css['ui-datepicker']}>
         <h2 class=${css.title}>Date Picker</h2>
-        ${datepicker({month1: [currentMonth, currentDays, year], month2: [nextMonth, nextDays, year] }, protocol)}
+        ${datepicker1}
       </div>
+      <!--- // ui-datepicker end -->
 
     </section>
-    
     <div class=${css.terminal}> </div>
-  </div>
-  `
-  const [section, terminal] = element.children
+  </div>`
+
+  const [, terminal] = element.children
  
-  function tabProtocol(message) {
-    const { from, flow, type, body, active} = message
-    const log = debug(from)
-    const logger = log.extend('datdot-ui')
-    const tabChanges = log.extend(`${flow} changes`)
-    // logger.log must be put first then logger()
-    logger.log = domlog
-    logger(message)
-
-
-    if ( state.tabs == undefined ) state.tabs = new Array()
-    const foundFrom = state.tabs.some( obj => obj.from === from )
-    const foundData = state.tabs.some( obj => obj.from === from && obj.data.some( d => d.body === body ) )
-    const filterFrom = state.tabs.filter( obj => obj.from === from )
-
-    // check from if not existed then store new tab
-    if ( !foundFrom ) {
-      state.tabs.push( { from, data: [ {from, flow, type, body, active, logger} ] })
-      return tabChanges('state', state.tabs)
+  return element
+  /*********************************************
+    PROTOCOLS
+  *********************************************/
+  function datepickerProtocol (send) {
+    return function receiveFromDatepicker (message) {
+      const { type } = message
+      if (type === 'value') return log(message)
+      log('<= received', message)
     }
+  } 
 
-    // check from and data existed then only change current tab status
-    if ( foundData ) {
-      filterFrom.map( o => o.data.map( d => d.active = d.body === body) )
-      return tabChanges('state', state.tabs)
-    }
-
-    // when data is not existed then add to data
-    filterFrom.map( o => o.data.push({from, flow, type, body, active, logger}) ) 
-    
-    // check from existed then store current tab status
-    if ( foundFrom ) {
-      filterFrom.map( o => o.data.map( d => d.active = d.body === body ))
-    }
-    
-    // check tab
-    tabChanges('state', state.tabs)
-    
-    return receive(message)
-  }
-
-  function calendarMonthProtocol(message) {
-    const { from, flow, type, body, count, month, year, days } = message
-    const log = debug(from)
-    const logger = log.extend('datdot-ui')
-    const calenderTitleChanges = log.extend(`${flow} changes >`)
-    logger.log = domlog
-    logger(message)
-
-    // check calendar
-    state.calendar = Object.assign({}, message)
-    calenderTitleChanges('state', `${month} ${year}`, state.calendar)
-    
-    const typeTimeline = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`}, timelineDaysProtocol )
-    // type: 'multiple picker', '
-    const typeTable = calendarDays( {data: state.calendar, type: 'multiple-date-picker', style: `${css['calendar-days']}`}, calendarDaysProtocol )
-    const timeline = document.querySelector(`.${css['calendar-timeline-days']}`)
-    const table = document.querySelector(`.${css['calendar-table-days']}`)
-    timeline.innerHTML = ''
-    table.innerHTML = ''
-    timeline.append(typeTimeline)
-    table.append(typeTable)
-    
-    return receive(message)
-  }
-  
-  function calendarDaysProtocol(message){
-    const { from, flow, type, body, count, month, year, days} = message
-    const log = debug(from)
-    const logger = log.extend('calendar-days')
-    logger.log = domlog
-    logger(`${type} day ${body}`, message) 
-
-    return receive(message)
-  }
-
-  function timelineDaysProtocol(message){
-    const { from, flow, type, body, count, month, year, days} = message
-    const log = debug(from)
-    const logger = log.extend('timeline-days')
-    logger.log = domlog
-    logger(`${type} day ${body}`, message) 
-    return receive(message)
-  }
-
-  function receive(message) {
-    if ( message.active) {
+  function tabProtocol (send) {
+    return function receiveFromTab (message) {
       const { from, flow, type, body, active} = message
       const log = debug(from)
-      const logger = log.extend('receive >')
-      logger(flow, type, body, active)
-    }
+      const logger = log.extend('datdot-ui')
+      const tabChanges = log.extend(`${flow} changes`)
+      // logger.log must be put first then logger()
+      logger.log = domlog
+      logger(message)
+      if ( state.tabs == undefined ) state.tabs = new Array()
+      const foundFrom = state.tabs.some( obj => obj.from === from )
+      const foundData = state.tabs.some( obj => obj.from === from && obj.data.some( d => d.body === body ) )
+      const filterFrom = state.tabs.filter( obj => obj.from === from )
 
-   if ( message.month ) {
+      // check from if not existed then store new tab
+      if ( !foundFrom ) {
+        state.tabs.push( { from, data: [ {from, flow, type, body, active, logger} ] })
+        return tabChanges('state', state.tabs)
+      }
+
+      // check from and data existed then only change current tab status
+      if ( foundData ) {
+        filterFrom.map( o => o.data.map( d => d.active = d.body === body) )
+        return tabChanges('state', state.tabs)
+      }
+
+      // when data is not existed then add to data
+      filterFrom.map( o => o.data.push({from, flow, type, body, active, logger}) ) 
+      
+      // check from existed then store current tab status
+      if ( foundFrom ) {
+        filterFrom.map( o => o.data.map( d => d.active = d.body === body ))
+      }
+      
+      // check tab
+      tabChanges('state', state.tabs)
+    }
+  }
+
+  function calendarMonthProtocol (send) {
+    return function receiveFromCalendarMonth (message) {
+      const { from, flow, type, body, count, month, year, days } = message
+      const log = debug(from)
+      const logger = log.extend('datdot-ui')
+      const calenderTitleChanges = log.extend(`${flow} changes >`)
+      logger.log = domlog
+      logger(message)
+
+      // check calendar
+      state.calendar = Object.assign({}, message)
+      calenderTitleChanges('state', `${month} ${year}`, state.calendar)
+      
+      const typeTimeline = timelineDays( {from, data: state.calendar, style: `${css['timeline-days']}`}, timelineDaysProtocol )
+      // type: 'multiple picker', '
+      const timeline = document.querySelector(`.${css['calendar-timeline-days']}`)
+      timeline.innerHTML = ''
+      timeline.append(typeTimeline)
+    }
+  }
+
+  // function calendarDaysProtocol (send) {
+  //   return function receiveFromCalendarDays (message) {
+  //     const { from, flow, type, body, count, month, year, days} = message
+  //     const log = debug(from)
+  //     const logger = log.extend('calendar-days')
+  //     logger.log = domlog
+  //     logger(`${type} day ${body}`, message) 
+  //   }
+  // }
+
+  function timelineDaysProtocol (send) {
+    return function receiveFromTimlineDays (message) {
       const { from, flow, type, body, count, month, year, days} = message
       const log = debug(from)
-      const logger = log.extend('receive >')
-      logger(flow, type, body, `${month} ${year}, ${days} days`)
-   }
-
-   log('<= received', message)
-   
+      const logger = log.extend('timeline-days')
+      logger.log = domlog
+      logger(`${type} day ${body}`, message) 
+    }
   }
 
   function domlog(...args) {
@@ -20770,10 +20764,10 @@ function datdotui (opts) {
       if (typeof obj === 'object' && obj.flow === 'ui-tab') var {from, flow, type, body} = obj
     }
     const el = bel`<div>${from + " > "}  ${flow}: ${body} ${type} ${month && month} ${year && year}${days ? `, ${days} days` : null }</div>`
-    terminal.insertBefore(el, terminal.firstChild)
+    // terminal.insertBefore(el, terminal.firstChild)
+    terminal.append(el)
+    terminal.scrollTop = terminal.scrollHeight
   }
-
-  return element
 
 }
 const css = csjs`
@@ -20803,7 +20797,7 @@ button:active, button:focus {
 .terminal div {
   margin: 10px 0;
 }
-.terminal div:first-child {
+.terminal div:last-child {
   color: #FFF500;
   font-weight: bold;
 }
@@ -20889,6 +20883,10 @@ module.exports = calendarDays
 
 function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'}, protocol) {
     const log = debug('ui-calendar-days')
+    // @TODO: what is the real name?
+    // * is it 'ui-calendar-days' ?
+    // * or is it 'calendar' ?
+    // * or is it maybe: 'calendar/ui-calendar-days' ???
     const sendToParent = protocol( receive )
     sendToParent({ from: name, type: 'init' })
     
@@ -21160,10 +21158,12 @@ const monthResult = require('month-result')
 const svg = require('svg')
 module.exports = datdot_ui_calendar_month
 
-function datdot_ui_calendar_month({page, getDate, type = 'click', mode = void 0}, protocol) {
+function datdot_ui_calendar_month({from, getDate, type = 'click', status = 'default'}, protocol) {
     const ui = 'ui-calendar-month'
-    const log = debug(page)
+    const name = `${from}/${ui}`
+    const log = debug(name)
     const logger = log.extend(`${ui} >`)
+    const sendToParent = protocol(function receive (message) { logger(message) })
     const date = getDate || new Date()
     let year = getYear( date )
     let current = getMonth( date )
@@ -21173,14 +21173,14 @@ function datdot_ui_calendar_month({page, getDate, type = 'click', mode = void 0}
 
     // elements
     const title = bel`<h3 class=${css.title}>${month} ${year}</h3>`
-    const iconPrev = svg( { css: `${css.icon} ${css['icon-prev']}`, path: './src/node_modules/assets/arrow-left.svg' } )
-    const iconNext = svg( { css: `${css.icon} ${css['icon-next']}`, path: './src/node_modules/assets/arrow-right.svg' } )
+    const iconPrev = svg( { css: `${css.icon} ${css['icon-prev']}`, path: './src/assets/arrow-left.svg' } )
+    const iconNext = svg( { css: `${css.icon} ${css['icon-next']}`, path: './src/assets/arrow-right.svg' } )
     const prev  = bel`<button role="button" aria-label="Previous month" class="${css.btn} ${css.prev}" onclick=${()=>trigger(prev)}>${iconPrev}</button>`
     const next = bel`<button role="button" aria-label="Next month" class="${css.btn} ${css.next}" onclick=${()=>trigger(next)}>${iconNext}</button>`
 
-    if ( mode === 'datepicker-multiple-days' || mode === 'datepicker-range-days') {
+    if ( status === 'datepicker-multiple-days' || status === 'datepicker-range-days') {
         var el = bel`<div class=${css["datepicker-header"]}>${title}</div>`
-    } else {
+    } else { // default status
         var el = bel`<div class=${css["calendar-header"]}>${prev}${title}${next}</div>`
     }
     return el
@@ -21207,9 +21207,9 @@ function datdot_ui_calendar_month({page, getDate, type = 'click', mode = void 0}
         logger(body, count, type, `${month} ${year}, ${days} days`)
        
         // send message to parent component
-        message = { from: page, flow: ui, type, mode, body, ...result}
+        message = { from, flow: ui, type, status, body, ...result}
         logger(message.body, 'send', message)
-        return protocol(message)
+        return sendToParent(message)
     } 
 }
 
@@ -21289,7 +21289,12 @@ const svg = require('svg')
 module.exports = datepicker
 
 function datepicker({name = 'concal', month1, month2, status = 'cleared'}, protocol) {
-    const log = debug('ui-datepicker')
+    const ui = 'ui-datepicker'
+    // @TODO: what is the real name?
+    // * is it 'ui-calendar-days' ?
+    // * or is it 'calendar' ?
+    // * or is it maybe: 'calendar/ui-calendar-days' ???
+    const log = debug(ui)
     let msg = { from: name, type: 'ready'}
     log(JSON.stringify(msg, 0, 2))
     const sendToParent = protocol( receive )
@@ -21302,8 +21307,8 @@ function datepicker({name = 'concal', month1, month2, status = 'cleared'}, proto
      // elements
     const cal1 = calendarDays({name: name1, month: month1[0], days: month1[1], year: month1[2], status }, calendarDaysProtocol)
     const cal2 = calendarDays({name: name2, month: month2[0], days: month2[1], year: month2[2], status }, calendarDaysProtocol)
-    const iconPrev = svg( { css: `${css.icon} ${css['icon-prev']}`, path: './src/node_modules/assets/arrow-left.svg' } )
-    const iconNext = svg( { css: `${css.icon} ${css['icon-next']}`, path: './src/node_modules/assets/arrow-right.svg' } )
+    const iconPrev = svg( { css: `${css.icon} ${css['icon-prev']}`, path: './src/assets/arrow-left.svg' } )
+    const iconNext = svg( { css: `${css.icon} ${css['icon-next']}`, path: './src/assets/arrow-right.svg' } )
     const prevMonth  = bel`<button role="button" aria-label="Previous month" class="${css.btn} ${css.prev}" onclick=${triggerPreviousMonth}>${iconPrev}</button>`
     const nextMonth = bel`<button role="button" aria-label="Next month" class="${css.btn} ${css.next}" onclick=${triggerNextMonth}>${iconNext}</button>`
     
@@ -21503,16 +21508,18 @@ const debug = require('debug')
 
 module.exports = datdot_ui_tab
 
-function datdot_ui_tab({page, arr}, protocol) {
-    const ui = 'ui-tab'
-    const log = debug(page)
+function datdot_ui_tab({from, arr}, protocol) {
+    const widget = 'ui-tab'
+    const name = `${from}/${widget}`
+    const log = debug(name)
+    const sendToParent = protocol(function receive (message) { log(message) })
     const element = bel`
-    <nav role="tablist" aria-label="${page}" class=${css.tablist}>
-        ${arr.map( (name, index) => {
+    <nav role="tablist" aria-tab="${from}" class=${css.tablist}>
+        ${arr.map( (tab, index) => {
                 if (index === 0) {
-                    return bel`<button role="tab" tabindex="0" aria-label="${name}" aria-selected="true" class="${css.btn} ${css.current}" onclick=${ (e) => onTrigger(e, name) }>${name}</button>`
+                    return bel`<button role="tab" tabindex="0" aria-tab="${tab}" aria-selected="true" class="${css.btn} ${css.current}" onclick=${ (e) => onTrigger(e, tab) }>${tab}</button>`
                 } else {
-                    return bel`<button role="tab" tabindex="-1" aria-label="${name}" aria-selected="false" class=${css.btn} onclick=${ (e) => onTrigger(e, name) }>${name}</button>`
+                    return bel`<button role="tab" tabindex="-1" aria-tab="${tab}" aria-selected="false" class=${css.btn} onclick=${ (e) => onTrigger(e, tab) }>${tab}</button>`
                 }
             })
         }
@@ -21521,9 +21528,9 @@ function datdot_ui_tab({page, arr}, protocol) {
 
     return element
 
-    function onTrigger(e, name) {
-        const logger = log.extend(`${ui} > ${name}`)
-        let message = { from: page, flow: ui, type: 'click', body: name, active: false}
+    function onTrigger(e, tab) {
+        const logger = log.extend(`${from} > ${tab}`)
+        let message = { from, flow: widget, type: 'click', body: tab, active: false}
         const el = e.target
         const childrens = [...element.children]
 
@@ -21537,14 +21544,14 @@ function datdot_ui_tab({page, arr}, protocol) {
             message.active = false
         })
 
-        if ( el.innerText === name ) {
+        if ( el.innerText === tab ) {
             el.setAttribute('aria-selected', true)
             el.classList.add(css.current)
             message.active = true
         }
 
         logger('send', message)
-        return protocol(message)
+        return sendToParent(message)
     }
 
 }
@@ -21580,10 +21587,13 @@ const { format, getDate, getMonth, getYear, getDaysInMonth, isToday } = require(
 
 module.exports = datdot_ui_timeline_days
 
-function datdot_ui_timeline_days({data = null, style}, protocol) {
-    const ui = 'ui-timeline-days'
+function datdot_ui_timeline_days({from = 'Default', data = null, style}, protocol) {
+    const widget = 'ui-timeline-days'
+    const name = `${from}/${widget}`
+    const log = debug(name)
     const date = new Date()
     const today = getDate(date)
+    const sendToParent = protocol(function receive (message) { log(message) })
 
     if ( data === null ) {
         // if no data
@@ -21597,10 +21607,7 @@ function datdot_ui_timeline_days({data = null, style}, protocol) {
     }
 
     const is_today = (d) => isToday(new Date(year, count, d)) 
-
-    
     const el = bel`<section role="timeline-days" class=${style}></section>`
-    const log = debug(ui)
 
     for (let d = 1; d <= days; d++ ) {
         let date = format(new Date(year, count, d), 'd MMMM  yyyy, EEEE')
@@ -21616,15 +21623,13 @@ function datdot_ui_timeline_days({data = null, style}, protocol) {
          else {
             var day = bel`<div role="button" class="${css['timeline-day']} ${is_today(d) ? `${css.today} ${css['date-selected']}` : ''}" tabindex="-1" aria-today=${is_today(d)} aria-label="${date}" aria-selected="${is_today(d)}" data-date="${setDate}" onclick=${(el) => onclick( el.target, setDate )}>${d}</div>`
         }
-
-
         el.append(day)
     }
     
     return el
 
     function onclick(target, date) {
-        const message = { from: from ? from : ui, flow: ui, type: 'click', body: date, count, month, year, days }
+        const message = { from, flow: widget, type: 'click', body: date, count, month, year, days }
         const logger = log.extend(`day> ${message.body}`)
 
         const children = [...el.children]
@@ -21636,10 +21641,8 @@ function datdot_ui_timeline_days({data = null, style}, protocol) {
         target.classList.add(css['date-selected'])
         target.setAttribute('aria-selected', true)
 
-        logger('date selected', date);
         logger('send', message)
-
-        return protocol(message)
+        return sendToParent(message)
     }
 }
 

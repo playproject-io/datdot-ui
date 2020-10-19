@@ -25,15 +25,13 @@ function datdotui (opts) {
   let nextDays = getDaysInMonth(new Date(year, nextMonth))
   // store data
   let state = {}
-
   
-
   // SUB COMPONENTS
   const timelinedays = timelineDays( {data: null, style: `${css['timeline-days']}` }, timelineDaysProtocol )
-  const tab1 = tab({page: jobs.title, arr: jobs.tab}, tabProtocol)
-  const tab2 = tab({page: plans.title, arr: plans.tab}, tabProtocol)
-  const calendarmonth1 = calendarMonth({page: jobs.title}, calendarMonthProtocol)
-  const calendarmonth2 = calendarMonth({page: plans.title}, calendarMonthProtocol)
+  const tab1 = tab({from: jobs.title, arr: jobs.tab}, tabProtocol)
+  const tab2 = tab({from: plans.title, arr: plans.tab}, tabProtocol)
+  const calendarmonth1 = calendarMonth({from: jobs.title}, calendarMonthProtocol)
+  const calendarmonth2 = calendarMonth({from: plans.title}, calendarMonthProtocol)
   const datepicker1 = datepicker({month1: [currentMonth, currentDays, year], month2: [nextMonth, nextDays, year] }, datepickerProtocol)
 
   const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
@@ -44,20 +42,37 @@ function datdotui (opts) {
   const element = bel`
   <div class=${css.wrap}>
     <section class=${css["ui-widgets"]}>
-      <div class=${css['ui-tab']}><h2 class=${css.title}>Tab</h2>${tab1}${tab2}</div>
+
+      <!--- tab start -->
+      <div class=${css['ui-tab']}>
+        <h2 class=${css.title}>Tab</h2>
+        ${tab1}
+        ${tab2}
+      </div>
+      <!--- // tab end -->
+
+      <!--- ui-calendar-month start -->
       <div class=${css['ui-calendar-header']}>
         <h2 class=${css.title}>Calendar Header</h2>
         <div class=${css["custom-header"]}>${calendarmonth1}</div>
         <div class=${css["calendar-header-fullsize"]}>${calendarmonth2}</div>
       </div>
+      <!--- // ui-calendar-month end -->
+
+      <!--- ui-calendar-timeline-days start -->
       <div class=${css.days}>
         <h2 class=${css.title}>Timline days</h2>
         <div class=${css['calendar-timeline-days']}>${timelinedays}</div>
       </div>
+      <!--- // ui-calendar-timeline-days end -->
+
+      <!--- ui-datepicker start -->
       <div class=${css['ui-datepicker']}>
         <h2 class=${css.title}>Date Picker</h2>
         ${datepicker1}
       </div>
+      <!--- // ui-datepicker end -->
+
     </section>
     <div class=${css.terminal}> </div>
   </div>`
@@ -72,22 +87,7 @@ function datdotui (opts) {
     return function receiveFromDatepicker (message) {
       const { type } = message
       if (type === 'value') return log(message)
-      if ( message.active) {
-        const { from, flow, type, body, active} = message
-        const log = debug(from)
-        const logger = log.extend('receive >')
-        logger(flow, type, body, active)
-      }
-
-    if ( message.month ) {
-        const { from, flow, type, body, count, month, year, days} = message
-        const log = debug(from)
-        const logger = log.extend('receive >')
-        logger(flow, type, body, `${month} ${year}, ${days} days`)
-    }
-
-    log('<= received', message)
-    
+      log('<= received', message)
     }
   } 
 
@@ -100,8 +100,6 @@ function datdotui (opts) {
       // logger.log must be put first then logger()
       logger.log = domlog
       logger(message)
-
-
       if ( state.tabs == undefined ) state.tabs = new Array()
       const foundFrom = state.tabs.some( obj => obj.from === from )
       const foundData = state.tabs.some( obj => obj.from === from && obj.data.some( d => d.body === body ) )
@@ -129,66 +127,49 @@ function datdotui (opts) {
       
       // check tab
       tabChanges('state', state.tabs)
-
-      // @TODO: what do you want to do here? ...and why? :-)
-      // receive(message)
     }
   }
 
+  function calendarMonthProtocol (send) {
+    return function receiveFromCalendarMonth (message) {
+      const { from, flow, type, body, count, month, year, days } = message
+      const log = debug(from)
+      const logger = log.extend('datdot-ui')
+      const calenderTitleChanges = log.extend(`${flow} changes >`)
+      logger.log = domlog
+      logger(message)
 
-  function calendarMonthProtocol (message) {
-    throw new Error('@TODO: refactor into proper protocol (see tabProtocol) as inspiration')
-    const { from, flow, type, body, count, month, year, days } = message
-    const log = debug(from)
-    const logger = log.extend('datdot-ui')
-    const calenderTitleChanges = log.extend(`${flow} changes >`)
-    logger.log = domlog
-    logger(message)
-
-    // check calendar
-    state.calendar = Object.assign({}, message)
-    calenderTitleChanges('state', `${month} ${year}`, state.calendar)
-    
-    const typeTimeline = timelineDays( {data: state.calendar, style: `${css['timeline-days']}`}, timelineDaysProtocol )
-    // type: 'multiple picker', '
-    const typeTable = calendarDays( {data: state.calendar, type: 'multiple-date-picker', style: `${css['calendar-days']}`}, calendarDaysProtocol )
-    const timeline = document.querySelector(`.${css['calendar-timeline-days']}`)
-    const table = document.querySelector(`.${css['calendar-table-days']}`)
-    timeline.innerHTML = ''
-    table.innerHTML = ''
-    timeline.append(typeTimeline)
-    table.append(typeTable)
-    
-    // @TODO: what do you want to do here? ...and why? :-)
-    // return receive(message)
+      // check calendar
+      state.calendar = Object.assign({}, message)
+      calenderTitleChanges('state', `${month} ${year}`, state.calendar)
+      
+      const typeTimeline = timelineDays( {from, data: state.calendar, style: `${css['timeline-days']}`}, timelineDaysProtocol )
+      // type: 'multiple picker', '
+      const timeline = document.querySelector(`.${css['calendar-timeline-days']}`)
+      timeline.innerHTML = ''
+      timeline.append(typeTimeline)
+    }
   }
 
-  function calendarDaysProtocol (message) {
-    throw new Error('@TODO: refactor into proper protocol (see tabProtocol) as inspiration')
+  // function calendarDaysProtocol (send) {
+  //   return function receiveFromCalendarDays (message) {
+  //     const { from, flow, type, body, count, month, year, days} = message
+  //     const log = debug(from)
+  //     const logger = log.extend('calendar-days')
+  //     logger.log = domlog
+  //     logger(`${type} day ${body}`, message) 
+  //   }
+  // }
 
-    const { from, flow, type, body, count, month, year, days} = message
-    const log = debug(from)
-    const logger = log.extend('calendar-days')
-    logger.log = domlog
-    logger(`${type} day ${body}`, message) 
-
-    // @TODO: what do you want to do here? ...and why? :-)
-    // return receive(message)
+  function timelineDaysProtocol (send) {
+    return function receiveFromTimlineDays (message) {
+      const { from, flow, type, body, count, month, year, days} = message
+      const log = debug(from)
+      const logger = log.extend('timeline-days')
+      logger.log = domlog
+      logger(`${type} day ${body}`, message) 
+    }
   }
-
-  function timelineDaysProtocol (message) {
-    throw new Error('@TODO: refactor into proper protocol (see tabProtocol) as inspiration')
-
-    const { from, flow, type, body, count, month, year, days} = message
-    const log = debug(from)
-    const logger = log.extend('timeline-days')
-    logger.log = domlog
-    logger(`${type} day ${body}`, message) 
-
-    // @TODO: what do you want to do here? ...and why? :-)
-    // return receive(message)
-  }
-
 
   function domlog(...args) {
     for (let obj of args) {
