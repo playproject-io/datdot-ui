@@ -20873,7 +20873,7 @@ button:active, button:focus {
 
 }
 `
-},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-days":263,"datdot-ui-calendar-month":264,"datdot-ui-datepicker":266,"datdot-ui-tab":268,"datdot-ui-timeline-days":269,"date-fns":142,"debug":255}],263:[function(require,module,exports){
+},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-days":263,"datdot-ui-calendar-month":264,"datdot-ui-datepicker":266,"datdot-ui-tab":267,"datdot-ui-timeline-days":268,"date-fns":142,"debug":255}],263:[function(require,module,exports){
 const bel = require('bel')
 const csjs = require('csjs-inject')
 const debug = require('debug')
@@ -21288,13 +21288,13 @@ const svg = require('svg')
 
 module.exports = datepicker
 
-function datepicker({name = 'concal', month1, month2, status = 'cleared'}, protocol) {
-    const ui = 'ui-datepicker'
+function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}, protocol) {
     // @TODO: what is the real name?
     // * is it 'ui-calendar-days' ?
     // * or is it 'calendar' ?
     // * or is it maybe: 'calendar/ui-calendar-days' ???
-    const log = debug(ui)
+    // * none of this answer, I would perfer called it datepicker as same as other plugins calls
+    const log = debug(name)
     let msg = { from: name, type: 'ready'}
     log(JSON.stringify(msg, 0, 2))
     const sendToParent = protocol( receive )
@@ -21499,9 +21499,7 @@ const css = csjs`
     text-align: center;
 }
 `
-},{"../datdot-ui-calendar-days":263,"bel":3,"csjs-inject":6,"debug":255,"month-result":267,"svg":270}],267:[function(require,module,exports){
-arguments[4][265][0].apply(exports,arguments)
-},{"date-fns":142,"dup":265}],268:[function(require,module,exports){
+},{"../datdot-ui-calendar-days":263,"bel":3,"csjs-inject":6,"debug":255,"month-result":269,"svg":270}],267:[function(require,module,exports){
 const bel = require(('bel'))
 const csjs = require('csjs-inject')
 const debug = require('debug')
@@ -21579,7 +21577,7 @@ const css = csjs`
     background-color: #fff;
 }
 `
-},{"bel":3,"csjs-inject":6,"debug":255}],269:[function(require,module,exports){
+},{"bel":3,"csjs-inject":6,"debug":255}],268:[function(require,module,exports){
 const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
@@ -21676,7 +21674,9 @@ const css = csjs`
     background: none; 
 }
 `
-},{"bel":3,"csjs-inject":6,"date-fns":142,"debug":255}],270:[function(require,module,exports){
+},{"bel":3,"csjs-inject":6,"date-fns":142,"debug":255}],269:[function(require,module,exports){
+arguments[4][265][0].apply(exports,arguments)
+},{"date-fns":142,"dup":265}],270:[function(require,module,exports){
 module.exports = svg
 
 function svg(opts) {
