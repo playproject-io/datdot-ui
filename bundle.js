@@ -20587,12 +20587,11 @@ process.umask = function() { return 0; };
 const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
-const { lightFormat, getYear, getMonth, getDaysInMonth } = require('date-fns')
+const { isBefore, getYear, getMonth, getDaysInMonth } = require('date-fns')
 // widgets
 const tab = require('datdot-ui-tab')
 const calendarMonth = require('datdot-ui-calendar-month')
 const timelineDays = require('datdot-ui-timeline-days')
-const calendarDays = require('datdot-ui-calendar-days')
 const datepicker = require('datdot-ui-datepicker')
 
 module.exports = datdotui
@@ -20671,9 +20670,15 @@ function datdotui (opts) {
   *********************************************/
   function datepickerProtocol (send) {
     return function receiveFromDatepicker (message) {
-      const { type } = message
-      if (type === 'value') return log(message)
-      log('<= received', message)
+      const { from, type, body } = message
+      const log = debug(from)
+      const logger = log.extend('datdot-ui')
+      logger.log = domlog
+      logger(message)
+      // if (type === 'value/first') return log('<= received frist date', from, body)
+      // if (type === 'value/second') return log('<= received second date', from, body)
+      if (type === 'value') return log('<= received first and second date', body)
+      
     }
   } 
 
@@ -20758,12 +20763,22 @@ function datdotui (opts) {
   }
 
   function domlog(...args) {
+    // console.log(args)
     for (let obj of args) {
       if (typeof obj === 'object' && obj.hasOwnProperty('month')) var {from, flow, type, body, month, year, days} = obj
       if (typeof obj === 'object' && obj.hasOwnProperty('calendar-days')) var {from, flow, type, body, month, year, days} = obj
       if (typeof obj === 'object' && obj.flow === 'ui-tab') var {from, flow, type, body} = obj
+      if (typeof obj === 'object' && obj.flow === 'ui-datepicker') var { from, flow, type, body} = obj
+      if (typeof obj === 'object' && obj.from === 'ui-datepicker') {
+        var { from, body} = obj
+        var { first, second } = body
+        var result = isBefore(new Date(...first), new Date(...second))
+        var start = result ? first.join('-') : second.join('-')
+        var end = result ? second.join('-') : first.join('-')
+      } 
+      
     }
-    const el = bel`<div>${from + " > "}  ${flow}: ${body} ${type} ${month && month} ${year && year}${days ? `, ${days} days` : null }</div>`
+    const el = bel`<div>${`${from} >`} ${flow}: ${body} ${start && `From ${start} to ${end}`} ${type} ${month && month} ${year && year}${days && `, ${days} days`}</div>`
     // terminal.insertBefore(el, terminal.firstChild)
     terminal.append(el)
     terminal.scrollTop = terminal.scrollHeight
@@ -20873,7 +20888,7 @@ button:active, button:focus {
 
 }
 `
-},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-days":263,"datdot-ui-calendar-month":264,"datdot-ui-datepicker":266,"datdot-ui-tab":267,"datdot-ui-timeline-days":268,"date-fns":142,"debug":255}],263:[function(require,module,exports){
+},{"bel":3,"csjs-inject":6,"datdot-ui-calendar-month":264,"datdot-ui-datepicker":266,"datdot-ui-tab":267,"datdot-ui-timeline-days":268,"date-fns":142,"debug":255}],263:[function(require,module,exports){
 const bel = require('bel')
 const csjs = require('csjs-inject')
 const debug = require('debug')
@@ -20890,7 +20905,8 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
     // * or is it maybe: 'calendar/ui-calendar-days' ???
     const sendToParent = protocol( receive )
     sendToParent({ from: name, type: 'init' })
-    
+
+    let first, second
     const calendar = makeDays(days)
     const buttons = [...calendar.children]
 
@@ -20912,7 +20928,7 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         log(`${from} => ${type} => ${name}`)
         if (type === 'clear') return actionClear()
         if (type === 'selecting-second') return actionSelectingSecond(body)
-        if (type === 'not-selecting-second') return actionKeepFirst(body)
+        if (type === 'not-selecting-second') return // actionKeepFirst(body)
         if (type === 'first-selected-by-startcal') return setStatus('first-selected-by-startcal')
         if (type === 'first-selected-by-endcal') return setStatus('first-selected-by-endcal')
         if (type === 'second-selected') return setStatus('second-selected-by-other')
@@ -20960,7 +20976,6 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
     }
 
     function onmouseenter (event) {
-        // log('onmouseenter', {from: name, status})
         if (status === 'cleared') return
         if (status === 'first-selected-by-self') return
         if (status === 'first-selected-by-startcal') return notifyOther()
@@ -20970,7 +20985,6 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
     }
 
     function onmouseleave (event) {
-        // log('onmouseleave', {from: name, status})
         if (status === 'cleared') return
         if (status === 'first-selected-by-self') return onlyKeepFirst()
         if (status === 'first-selected-by-startcal') return clearAndNotify()
@@ -21015,7 +21029,7 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         second = current
         setStatus('second-selected-by-self')
         sendToParent({from: name, type: 'second-selected'})
-        return sendToParent({from: name, type: 'value/second', body: [month, second, year] })
+        return sendToParent({from: name, type: 'value/second', body: [year, month, second] })
     }
 
     function selectFirst (btn, current) {
@@ -21024,7 +21038,7 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         first = current
         btn.classList.add(css['date-selected'])
         setStatus('first-selected-by-self')
-        return sendToParent({from: name, type: 'value/first', body: [month, first, year] })
+        return sendToParent({from: name, type: 'value/first', body: [year, month, first] })
     }
 
     function markRange (btn, A, B) {
@@ -21037,7 +21051,7 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         buttons.map( btn => {
             let current = parseInt(btn.dataset.num)
             if (!current || btn.classList.contains(css["disabled-day"])) return
-            if (current <= first) {
+            if (current < first) {
                 btn.classList.remove(css['date-selected'])
                 btn.classList.remove(css['date-in-range'])
             } 
@@ -21353,7 +21367,7 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
         log(`<= ${type} <= ${from}`) 
         if (type === 'init') return storeSendFN(from, sendSubComponent)
         if (type === 'value/first') return notifyAndStoreFirst(from, body)
-        if (type === 'value/second') return notifyParent(body)
+        if (type === 'value/second') return notifyParent(from, body)
         if (type === 'selecting-second') return notifyOtherCalenderSelectingLast(from)
         if (type === 'cleared') return clearOther( from === name1 ? name2 : name1)
         else return forwardMessage(from, message)
@@ -21374,13 +21388,14 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
 
     function clearOther(from) {
         const send = recipients[from]
-        return sendSubComponent({ from: name, type: 'clear'})
+        return send({ from: name, type: 'clear'})
     }
 
-    function notifyParent(body) {
+    function notifyParent(from, body) {
         value.second = body
         const message = {from: name, type: 'value', body: value} 
-        log('notify parent', message)
+        log(`notify parent: ${name} ${body}`)
+        sendToParent({from, flow: name, type:'value/second', body})
         return sendToParent(message)
     }
 
@@ -21389,14 +21404,14 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
             const send = recipients[name2]
             const message  = {from: name, type: 'color-from-start'}
             log(message)
-            return sendSubComponent( message )
+            return send( message )
         }
 
         if (from === name2) {
             const send = recipients[name1]
             const message = {from: name, type: 'color-to-end'}
             log(message)
-            return sendSubComponent(message)
+            return send(message)
         }
     }
     
@@ -21405,6 +21420,7 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
         const list = [from]
         const receivers = filterOutRcipients(list)
         const type = from === name1 ? 'first-selected-by-startcal' : 'first-selected-by-endcal'
+        sendToParent({from, flow: name, type: 'value/first', body})
         return broadcast( receivers, {from: name, type}) 
     }
 

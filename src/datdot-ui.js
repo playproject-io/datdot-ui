@@ -1,12 +1,11 @@
 const debug = require('debug')
 const bel = require('bel')
 const csjs = require('csjs-inject')
-const { lightFormat, getYear, getMonth, getDaysInMonth } = require('date-fns')
+const { isBefore, getYear, getMonth, getDaysInMonth } = require('date-fns')
 // widgets
 const tab = require('datdot-ui-tab')
 const calendarMonth = require('datdot-ui-calendar-month')
 const timelineDays = require('datdot-ui-timeline-days')
-const calendarDays = require('datdot-ui-calendar-days')
 const datepicker = require('datdot-ui-datepicker')
 
 module.exports = datdotui
@@ -85,9 +84,15 @@ function datdotui (opts) {
   *********************************************/
   function datepickerProtocol (send) {
     return function receiveFromDatepicker (message) {
-      const { type } = message
-      if (type === 'value') return log(message)
-      log('<= received', message)
+      const { from, type, body } = message
+      const log = debug(from)
+      const logger = log.extend('datdot-ui')
+      logger.log = domlog
+      logger(message)
+      // if (type === 'value/first') return log('<= received frist date', from, body)
+      // if (type === 'value/second') return log('<= received second date', from, body)
+      if (type === 'value') return log('<= received first and second date', body)
+      
     }
   } 
 
@@ -172,12 +177,22 @@ function datdotui (opts) {
   }
 
   function domlog(...args) {
+    // console.log(args)
     for (let obj of args) {
       if (typeof obj === 'object' && obj.hasOwnProperty('month')) var {from, flow, type, body, month, year, days} = obj
       if (typeof obj === 'object' && obj.hasOwnProperty('calendar-days')) var {from, flow, type, body, month, year, days} = obj
       if (typeof obj === 'object' && obj.flow === 'ui-tab') var {from, flow, type, body} = obj
+      if (typeof obj === 'object' && obj.flow === 'ui-datepicker') var { from, flow, type, body} = obj
+      if (typeof obj === 'object' && obj.from === 'ui-datepicker') {
+        var { from, body} = obj
+        var { first, second } = body
+        var result = isBefore(new Date(...first), new Date(...second))
+        var start = result ? first.join('-') : second.join('-')
+        var end = result ? second.join('-') : first.join('-')
+      } 
+      
     }
-    const el = bel`<div>${from + " > "}  ${flow}: ${body} ${type} ${month && month} ${year && year}${days ? `, ${days} days` : null }</div>`
+    const el = bel`<div>${`${from} >`} ${flow}: ${body} ${start && `From ${start} to ${end}`} ${type} ${month && month} ${year && year}${days && `, ${days} days`}</div>`
     // terminal.insertBefore(el, terminal.firstChild)
     terminal.append(el)
     terminal.scrollTop = terminal.scrollHeight
