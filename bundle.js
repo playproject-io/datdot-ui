@@ -20617,7 +20617,7 @@ function datdotui (opts) {
   const tab2 = tab({from: plans.title, arr: plans.tab}, tabProtocol)
   const calendarmonth1 = calendarMonth({from: jobs.title}, calendarMonthProtocol)
   const calendarmonth2 = calendarMonth({from: plans.title}, calendarMonthProtocol)
-  const datepicker1 = datepicker({month1: [currentMonth, currentDays, year], month2: [nextMonth, nextDays, year] }, datepickerProtocol)
+  const datepicker1 = datepicker({month1: [year, currentMonth, currentDays], month2: [year, nextMonth, nextDays] }, datepickerProtocol)
 
   const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
   const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -20678,7 +20678,8 @@ function datdotui (opts) {
       // if (type === 'value/first') return log('<= received frist date', from, body)
       // if (type === 'value/second') return log('<= received second date', from, body)
       if (type === 'value') return log('<= received first and second date', body)
-      
+      // if (type === 'next-month') return log('<= received', body)
+      // if (type === 'prev-month') return log('<= received', body)
     }
   } 
 
@@ -20768,6 +20769,7 @@ function datdotui (opts) {
       if (typeof obj === 'object' && obj.hasOwnProperty('month')) var {from, flow, type, body, month, year, days} = obj
       if (typeof obj === 'object' && obj.hasOwnProperty('calendar-days')) var {from, flow, type, body, month, year, days} = obj
       if (typeof obj === 'object' && obj.flow === 'ui-tab') var {from, flow, type, body} = obj
+      if (typeof obj === 'object' && obj.from === 'calendar month') log(args[3])
       if (typeof obj === 'object' && obj.flow === 'ui-datepicker') var { from, flow, type, body} = obj
       if (typeof obj === 'object' && obj.from === 'ui-datepicker') {
         var { from, body} = obj
@@ -20892,24 +20894,19 @@ button:active, button:focus {
 const bel = require('bel')
 const csjs = require('csjs-inject')
 const debug = require('debug')
-const { isToday, format, isBefore, isAfter, isPast, getDay, getDate, getMonth, getYear, getDaysInMonth } = require('date-fns')
+const { isToday, format, isPast, getDay, getDate, getMonth, getYear, getDaysInMonth } = require('date-fns')
 
 module.exports = calendarDays
 
 function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'}, protocol) {
     const widget = 'ui-calendar-days'
     const log = debug(`${widget}/${name}`)
-    // @TODO: what is the real name?
-    // * is it 'ui-calendar-days' ?
-    // * or is it 'calendar' ?
-    // * or is it maybe: 'calendar/ui-calendar-days' ???
     const sendToParent = protocol( receive )
     sendToParent({ from: name, type: 'init' })
-
+    let nowMonth = month, nowDays = days, nowYear = year
+    const calendar = makeDays(nowDays)
+    let buttons = [...calendar.children]
     let first, second
-    const calendar = makeDays(days)
-    const buttons = [...calendar.children]
-
     calendar.onmousemove = onmousemove
     calendar.onclick = onclick
     calendar.onmouseleave = onmouseleave
@@ -20928,12 +20925,31 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         log(`${from} => ${type} => ${name}`)
         if (type === 'clear') return actionClear()
         if (type === 'selecting-second') return actionSelectingSecond(body)
-        if (type === 'not-selecting-second') return // actionKeepFirst(body)
+        if (type === 'not-selecting-second') return actionKeepFirst(body)
         if (type === 'first-selected-by-startcal') return setStatus('first-selected-by-startcal')
         if (type === 'first-selected-by-endcal') return setStatus('first-selected-by-endcal')
         if (type === 'second-selected') return setStatus('second-selected-by-other')
         if (type === 'color-from-start') return actionColorFromStart()
         if (type === 'color-to-end') return actionColorToEnd()
+        if (type === 'change') return actionRenderNewCalendars(body)
+        if (type === 'color-range-from-start') return 
+        if (type === 'color-range-to-end') return 
+    }
+
+    function actionRenderNewCalendars(body) {
+        const { count, year, days } = body
+        nowMonth = count
+        nowYear = year
+        nowDays = days
+        const cal = makeDays(nowDays)
+        buttons = [...cal.children]
+
+        cal.onmousemove = onmousemove
+        cal.onclick = onclick
+        cal.onmouseleave = onmouseleave
+        cal.onmouseenter = onmouseenter
+        
+        return cal
     }
     
     function actionSelectingSecond (body) {
@@ -20976,6 +20992,7 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
     }
 
     function onmouseenter (event) {
+        log('current status', status)
         if (status === 'cleared') return
         if (status === 'first-selected-by-self') return
         if (status === 'first-selected-by-startcal') return notifyOther()
@@ -20985,6 +21002,7 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
     }
 
     function onmouseleave (event) {
+        log('current status', status)
         if (status === 'cleared') return
         if (status === 'first-selected-by-self') return onlyKeepFirst()
         if (status === 'first-selected-by-startcal') return clearAndNotify()
@@ -21003,9 +21021,11 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         if (status === 'first-selected-by-endcal') return markRange(btn, first, current)
         if (status === 'second-selected-by-self') return
         if (status === 'second-selected-by-other') return
+        
     }
 
     function onclick (event) {
+        log('current status', status)
         const btn = event.target
         const current = parseInt(btn.dataset.num)
         if (!current || btn.classList.contains(css["disabled-day"])) return
@@ -21029,7 +21049,7 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         second = current
         setStatus('second-selected-by-self')
         sendToParent({from: name, type: 'second-selected'})
-        return sendToParent({from: name, type: 'value/second', body: [year, month, second] })
+        return sendToParent({from: name, type: 'value/second', body: [nowYear, nowMonth+1, second] })
     }
 
     function selectFirst (btn, current) {
@@ -21038,7 +21058,7 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         first = current
         btn.classList.add(css['date-selected'])
         setStatus('first-selected-by-self')
-        return sendToParent({from: name, type: 'value/first', body: [year, month, first] })
+        return sendToParent({from: name, type: 'value/first', body: [nowYear, nowMonth+1, first] })
     }
 
     function markRange (btn, A, B) {
@@ -21080,16 +21100,14 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         getSpaceInPrevMonth(el)
 
         for (let i = 1; i < days + 1; i++) {
-            let formatDate = format(new Date(year, month, i), 'd MMMM yyyy, EEEE')
-            let setDate = format(new Date(year, month, i), 'yyyy-MM-d')
-            let btn = bel`<button role="button" aria-selected="false" tabindex="-1" data-num="${i}" aria-label="${formatDate}" data-date="${setDate}">${i}</button>`
-            if ( isToday(new Date(year, month, i)) ) {
+            let formatDate = format(new Date(nowYear, nowMonth, i), 'd MMMM yyyy, EEEE')
+            let btn = bel`<button role="button" aria-selected="false" tabindex="-1" data-num="${i}" aria-label="${formatDate}" data-date="${nowYear}-${nowMonth+1}-${i}">${i}</button>`
+            if (isToday(new Date(nowYear, nowMonth, i)) ) {
                 btn.classList.add(css.today)
                 btn.setAttribute('aria-today', true)
-            } 
-            else { 
+            } else { 
                 btn.classList.add(css.day)
-                if ( isPast(new Date(year, month, i)) ) btn.classList.add(css["disabled-day"])
+                if ( isPast(new Date(nowYear, nowMonth, i)) ) btn.classList.add(css["disabled-day"])
                 btn.setAttribute('aria-today', false)
             }
             el.append(btn)
@@ -21100,9 +21118,9 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
 
     function getSpaceInPrevMonth (el) {
         // get days in previous month
-        let daysInPrevMonth = getDaysInMonth(new Date(year, month-1))
+        let daysInPrevMonth = getDaysInMonth(new Date(nowYear, nowMonth-1))
         // get day in prev month which means to add how many spans
-        let dayInPrevMonth = getDay(new Date(year, month-1, daysInPrevMonth))
+        let dayInPrevMonth = getDay(new Date(nowYear, nowMonth-1, daysInPrevMonth))
         for (let s = dayInPrevMonth; s > 0; s--) {
             let span = bel`<div class=${css['day-prev']} role="presentation" aria-label aria-disabled="false"></div>`
             el.append((span))
@@ -21163,18 +21181,17 @@ const monthResult = require('month-result')
 const svg = require('svg')
 module.exports = datdot_ui_calendar_month
 
-function datdot_ui_calendar_month({from, getDate, type = 'click', status = 'default'}, protocol) {
-    const ui = 'ui-calendar-month'
-    const name = `${from}/${ui}`
+function datdot_ui_calendar_month({from, getDate, type = 'click', status = 'init', view = 'default'}, protocol) {
+    const widget = 'ui-calendar-month'
+    const name = `${from}/${widget}`
     const log = debug(name)
-    const logger = log.extend(`${ui} >`)
-    const sendToParent = protocol(function receive (message) { logger(message) })
+    const logger = log.extend(`${widget} >`)
+    const sendToParent = protocol( receive )
     const date = getDate || new Date()
     let year = getYear( date )
     let current = getMonth( date )
     // get Capital month
     let month = format( new Date(year, current), 'MMMM')
-    let message
 
     // elements
     const title = bel`<h3 class=${css.title}>${month} ${year}</h3>`
@@ -21183,7 +21200,7 @@ function datdot_ui_calendar_month({from, getDate, type = 'click', status = 'defa
     const prev  = bel`<button role="button" aria-label="Previous month" class="${css.btn} ${css.prev}" onclick=${()=>trigger(prev)}>${iconPrev}</button>`
     const next = bel`<button role="button" aria-label="Next month" class="${css.btn} ${css.next}" onclick=${()=>trigger(next)}>${iconNext}</button>`
 
-    if ( status === 'datepicker-multiple-days' || status === 'datepicker-range-days') {
+    if ( view === 'datepicker-multiple-days' || view === 'datepicker-range-days') {
         var el = bel`<div class=${css["datepicker-header"]}>${title}</div>`
     } else { // default status
         var el = bel`<div class=${css["calendar-header"]}>${prev}${title}${next}</div>`
@@ -21212,10 +21229,14 @@ function datdot_ui_calendar_month({from, getDate, type = 'click', status = 'defa
         logger(body, count, type, `${month} ${year}, ${days} days`)
        
         // send message to parent component
-        message = { from, flow: ui, type, status, body, ...result}
+        message = { from, flow: widget, type, status, body, ...result}
         logger(message.body, 'send', message)
         return sendToParent(message)
     } 
+
+    function receive(message) {
+        logger('msg from datepicker', message)
+    }
 }
 
 const css = csjs`
@@ -21287,68 +21308,92 @@ const bel = require('bel')
 const csjs = require('csjs-inject')
 const debug = require('debug')
 const monthResult = require('month-result')
+const { isPast, isFuture } = require('date-fns')
 // widgets
 const calendarDays = require('../datdot-ui-calendar-days')
+const calendarMonth = require('../datdot-ui-calendar-month')
 const svg = require('svg')
 
 module.exports = datepicker
 
-function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}, protocol) {
-    // @TODO: what is the real name?
-    // * is it 'ui-calendar-days' ?
-    // * or is it 'calendar' ?
-    // * or is it maybe: 'calendar/ui-calendar-days' ???
-    // * none of this answer, I would perfer called it datepicker as same as other plugins call
-    const log = debug(name)
+function datepicker({name = 'datepicker', month1, month2, status = 'cleared'}, protocol) {
+    const widget = 'ui-datepicker'
+    const log = debug(`${widget}/${name}`)
     log('ready')
     const sendToParent = protocol( receive )
-    let months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-    let name1 = `${months[month1[0]]} ${month1[2]}`
-    let name2 = `${months[month2[0]]} ${month2[2]}`
+    let name1 = 'calendar1'
+    let name2 = 'calendar2'
+    let count = month1[1]
     const recipients = {}
     let value = {}
-    let sendSubComponent, first, second
-     // elements
-    const cal1 = calendarDays({name: name1, month: month1[0], days: month1[1], year: month1[2], status }, calendarDaysProtocol)
-    const cal2 = calendarDays({name: name2, month: month2[0], days: month2[1], year: month2[2], status }, calendarDaysProtocol)
+    let first, second
+    // elements
+    let cal1 = calendarDays({name: name1, month: month1[1], days: month1[2], year: month1[0], status }, calendarDaysProtocol(name1))
+    let cal2 = calendarDays({name: name2, month: month2[1], days: month2[2], year: month2[0], status }, calendarDaysProtocol(name2))
+    const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    const title1 = calendarMonth({from: name, getDate: new Date(month1[0], month1[1]), view: 'datepicker-range-days'}, calendarMonthProtocol)
+    const title2 = calendarMonth({from: name, getDate: new Date(month2[0], month2[1]), view: 'datepicker-range-days'}, calendarMonthProtocol)
     const iconPrev = svg( { css: `${css.icon} ${css['icon-prev']}`, path: './src/assets/arrow-left.svg' } )
     const iconNext = svg( { css: `${css.icon} ${css['icon-next']}`, path: './src/assets/arrow-right.svg' } )
     const prevMonth  = bel`<button role="button" aria-label="Previous month" class="${css.btn} ${css.prev}" onclick=${triggerPreviousMonth}>${iconPrev}</button>`
     const nextMonth = bel`<button role="button" aria-label="Next month" class="${css.btn} ${css.next}" onclick=${triggerNextMonth}>${iconNext}</button>`
-    
-    const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    
-    
+    const container = bel`<div class=${css['calendar-container']}></div>`
+
+    container.append( calendarView(title1, cal1), calendarView(title2, cal2) )
+
     const element = bel`
     <div class=${css.datepicker}>
-        <div class=${css["calendar-month"]}>${prevMonth}${nextMonth}</div>
-        <div class=${css.calendar}>
-            ${monthTitle(name1)}
-            ${makeWeekDays()}
-            ${cal1}
-        </div>
-        <div class=${css.calendar}>
-            ${monthTitle(name2)}
-            ${makeWeekDays()}
-            ${cal2}
-        </div>
-        
+        <div class=${css["calendar-header"]}>${prevMonth}${nextMonth}</div>
+        ${container}
     </div>`
 
     return element
 
-    function monthTitle(name) {
-        return bel`<h2 class=${css.title}>${name}</h2>`
+    function calendarView (title, calendar) {
+        const cal = bel`<div class=${css.calendar}>${title}${makeWeekDays()}${calendar}</div>`
+        return cal
     }
 
-    function triggerPreviousMonth() {
-        log('prev month');
-    }
-    function triggerNextMonth() {
-        log('next month');
+    function calendarMonthProtocol (send) {
+        return function receiveMonth( message ) {
+            log(message)
+        }
     }
 
-    function makeWeekDays() {
+    function triggerPreviousMonth () {
+        count -= 2
+        const prevCal1 = monthResult(count)
+        const prevCal2 = monthResult(count + 1)
+        const message1 = { from: name, type: 'change', body: prevCal1}
+        const message2 = { from: name, type: 'change', body: prevCal2}
+        const ca1 = recipients[name1](message1)
+        const ca2 = recipients[name2](message2)
+        const month1Title = calendarMonth({from: name, getDate: new Date(prevCal1.year, prevCal1.count), view: 'datepicker-range-days'}, calendarMonthProtocol)
+        const month2Title = calendarMonth({from: name, getDate: new Date(prevCal2.year, prevCal2.count), view: 'datepicker-range-days'}, calendarMonthProtocol)
+        container.innerHTML = ''
+        container.append( calendarView(month1Title, ca1), calendarView(month2Title, ca2) )
+
+        const pastMonth = value.first ? isPast(new Date(prevCal1.year, prevCal1.count, prevCal1.days)) : undefined
+        if (pastMonth) return forwardMessage(name, {from: name, type: 'color-range-from-start'})
+    }
+    function triggerNextMonth () {
+        count += 2
+        const nextCal1 = monthResult(count)
+        const nextCal2 = monthResult(count + 1)
+        const message1 = { from: name, type: 'change', body: nextCal1}
+        const message2 = { from: name, type: 'change', body: nextCal2}
+        const ca1 = recipients[name1](message1)
+        const ca2 = recipients[name2](message2)
+        const month1Title = calendarMonth({from: name, getDate: new Date(nextCal1.year, nextCal1.count), view: 'datepicker-range-days'}, calendarMonthProtocol)
+        const month2Title = calendarMonth({from: name, getDate: new Date(nextCal2.year, nextCal2.count), view: 'datepicker-range-days'}, calendarMonthProtocol)
+        container.innerHTML = ''
+        container.append( calendarView(month1Title, ca1), calendarView(month2Title, ca2) )
+        
+        const nextMonth = value.first ? isFuture(new Date(nextCal1.year, nextCal1.count, nextCal1.days)) : undefined
+        if (nextMonth) return forwardMessage(name, {from: name, type: 'color-range-to-end'})
+    }
+
+    function makeWeekDays () {
         const el = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
         weekList.map( w => {
             let div = bel`<div class=${css['calendar-week']} role="week">${w.slice(0 ,1)}</div>`
@@ -21357,15 +21402,16 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
         return el
     }
 
-    function calendarDaysProtocol(send) {
-        sendSubComponent = send
-        return receive
+    function calendarDaysProtocol (name) {
+        return send => {
+            recipients[name] = send
+            return receive
+        }
     }
 
-    function receive( message ) {
+    function receive (message) {
         const {from, type, body} = message
         log(`<= ${type} <= ${from}`) 
-        if (type === 'init') return storeSendFN(from, sendSubComponent)
         if (type === 'value/first') return notifyAndStoreFirst(from, body)
         if (type === 'value/second') return notifyParent(from, body)
         if (type === 'selecting-second') return notifyOtherCalenderSelectingLast(from)
@@ -21373,33 +21419,33 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
         else return forwardMessage(from, message)
     }
 
-    function filterOutRecipients(list) {
+    function filterOutRecipients (list) {
         const receivers = Object.keys(recipients)
                                .filter( name => !list.includes(name))
                                .map(name => recipients[name])
         return receivers
     }
 
-    function forwardMessage(from, message) {
+    function forwardMessage (from, message) {
         const list = [from]
         const receivers = filterOutRecipients(list)
         broadcast(receivers, message)
     }
 
-    function clearOther(from) {
+    function clearOther (from) {
         const send = recipients[from]
         return send({ from: name, type: 'clear'})
     }
 
-    function notifyParent(from, body) {
+    function notifyParent (from, body) {
         value.second = body
-        const message = {from: name, type: 'value', body: value} 
-        log(`notify parent: ${name} ${body}`)
-        sendToParent({from, flow: name, type:'value/second', body})
+        const message = {from: widget, type: 'value', body: value} 
+        log(`notify parent: ${widget} ${body}`)
+        sendToParent({from, flow: widget, type:'value/second', body})
         return sendToParent(message)
     }
 
-    function notifyOtherCalenderSelectingLast(from) {
+    function notifyOtherCalenderSelectingLast (from) {
         if (from === name1) {
             const send = recipients[name2]
             const message  = {from: name, type: 'color-from-start'}
@@ -21415,27 +21461,23 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
         }
     }
     
-    function notifyAndStoreFirst(from, body) {
+    function notifyAndStoreFirst (from, body) {
         value.first = body
         const list = [from]
         const receivers = filterOutRcipients(list)
         const type = from === name1 ? 'first-selected-by-startcal' : 'first-selected-by-endcal'
-        sendToParent({from, flow: name, type: 'value/first', body})
+        sendToParent({from, flow: widget, type: 'value/first', body})
         return broadcast( receivers, {from: name, type}) 
     }
 
-    function storeSendFN(from, send) {
-        recipients[from] = send
-    }
-
-    function filterOutRcipients(list) {
+    function filterOutRcipients (list) {
         const receivers = Object.keys(recipients)
                                 .filter( name => !list.includes(name))
                                 .map( name => recipients[name])
         return receivers
     }
 
-    function broadcast(receivers, message) {
+    function broadcast (receivers, message) {
         const {from, type, body} = message
         for ( let i = 0, len = receivers.length; i < len; i++) {
             const send = receivers[i]
@@ -21450,7 +21492,6 @@ function datepicker({name = 'ui-datepicker', month1, month2, status = 'cleared'}
 const css = csjs`
 .datepicker {
     position: relative;
-    display: flex;
     max-width: 510px;
 }
 .datepicker-body {
@@ -21479,13 +21520,15 @@ const css = csjs`
 }
 .icon-prev {}
 .icon-next {}
-.calendar-month {
+.calendar-header {
     position: absolute;
     z-index: 9;
-    top: 8px;
     display: flex;
     justify-content: space-between;
     width: 100%;
+}
+.calendar-container {
+    display: flex;
 }
 .calendar-weekday {
     display: grid;
@@ -21505,7 +21548,7 @@ const css = csjs`
     text-align: center;
 }
 `
-},{"../datdot-ui-calendar-days":263,"bel":3,"csjs-inject":6,"debug":255,"month-result":269,"svg":270}],267:[function(require,module,exports){
+},{"../datdot-ui-calendar-days":263,"../datdot-ui-calendar-month":264,"bel":3,"csjs-inject":6,"date-fns":142,"debug":255,"month-result":269,"svg":270}],267:[function(require,module,exports){
 const bel = require(('bel'))
 const csjs = require('csjs-inject')
 const debug = require('debug')

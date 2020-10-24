@@ -31,7 +31,7 @@ function datdotui (opts) {
   const tab2 = tab({from: plans.title, arr: plans.tab}, tabProtocol)
   const calendarmonth1 = calendarMonth({from: jobs.title}, calendarMonthProtocol)
   const calendarmonth2 = calendarMonth({from: plans.title}, calendarMonthProtocol)
-  const datepicker1 = datepicker({month1: [currentMonth, currentDays, year], month2: [nextMonth, nextDays, year] }, datepickerProtocol)
+  const datepicker1 = datepicker({month1: [year, currentMonth, currentDays], month2: [year, nextMonth, nextDays] }, datepickerProtocol)
 
   const weekday = bel`<section class=${css['calendar-weekday']} role="weekday"></section>`
   const weekList= ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -92,7 +92,8 @@ function datdotui (opts) {
       // if (type === 'value/first') return log('<= received frist date', from, body)
       // if (type === 'value/second') return log('<= received second date', from, body)
       if (type === 'value') return log('<= received first and second date', body)
-      
+      // if (type === 'next-month') return log('<= received', body)
+      // if (type === 'prev-month') return log('<= received', body)
     }
   } 
 
@@ -182,6 +183,7 @@ function datdotui (opts) {
       if (typeof obj === 'object' && obj.hasOwnProperty('month')) var {from, flow, type, body, month, year, days} = obj
       if (typeof obj === 'object' && obj.hasOwnProperty('calendar-days')) var {from, flow, type, body, month, year, days} = obj
       if (typeof obj === 'object' && obj.flow === 'ui-tab') var {from, flow, type, body} = obj
+      if (typeof obj === 'object' && obj.from === 'calendar month') log(args[3])
       if (typeof obj === 'object' && obj.flow === 'ui-datepicker') var { from, flow, type, body} = obj
       if (typeof obj === 'object' && obj.from === 'ui-datepicker') {
         var { from, body} = obj
