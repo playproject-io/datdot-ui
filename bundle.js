@@ -20932,8 +20932,8 @@ function calendarDays({ name = 'calendar', month, days, year, status = 'cleared'
         if (type === 'color-from-start') return actionColorFromStart()
         if (type === 'color-to-end') return actionColorToEnd()
         if (type === 'change') return actionRenderNewCalendars(body)
-        if (type === 'color-range-from-start') return 
-        if (type === 'color-range-to-end') return 
+        if (type === 'color-range-from-start') return actionColorFromStart()
+        if (type === 'color-range-to-end') return actionColorToEnd()
     }
 
     function actionRenderNewCalendars(body) {
